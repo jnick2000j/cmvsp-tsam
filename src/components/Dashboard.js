@@ -1,0 +1,113 @@
+// src/components/Dashboard.js
+import React from 'react';
+import { LogOut } from 'lucide-react';
+import PendingActions from './PendingActions'; // Assuming PendingActions is also a component
+
+const Dashboard = ({ 
+    user, 
+    isInstructor, 
+    isStudent, 
+    enrolledClassesDetails, 
+    dailyCheckIns, 
+    handlePrerequisiteCheckin, 
+    handleCancelEnrollment, 
+    setActiveClassId,
+    myAssignments,
+    attendanceRecords,
+    handleInstructorCheckInOut,
+    classes,
+    paginatedPendingActions,
+    handleApproveAction,
+    handleDenyAction,
+    setPendingActionsPage,
+    pendingActionsPage,
+    allPendingActions
+}) => {
+
+    const todayISO = new Date().toISOString().split('T')[0];
+
+    return (
+        <div className="px-4 sm:px-6 lg:px-8 py-8">
+            {isStudent ? (
+                <div className="space-y-12">
+                    {enrolledClassesDetails.filter(c => user.enrolledClasses?.includes(c.id)).length > 0 ? (
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-900 mb-4">My Courses</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {enrolledClassesDetails.filter(c => user.enrolledClasses?.includes(c.id)).map(course => {
+                                    const todaysCheckIn = dailyCheckIns.find(dc => dc.studentId === user.uid && dc.classId === course.id && dc.checkInDate === todayISO);
+                                    const canCancel = (new Date(course.startDate).getTime() - new Date().getTime()) / (1000 * 60 * 60) > 24;
+                                    return (
+                                        <div key={course.id} className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col">
+                                             <div className="p-5 border-b flex-grow">
+                                                 <h3 className="text-lg font-bold text-gray-800">{course.name}</h3>
+                                                 <p className="text-sm text-gray-500">{course.startDate}</p>
+                                                 {course.studentGroups?.[user.uid] && <p className="text-sm font-semibold text-indigo-600 mt-1">Your Group: Group {course.studentGroups[user.uid]}</p>}
+                                             </div>
+                                            <div className="p-4 bg-gray-50 border-t space-y-2">
+                                                {todaysCheckIn?.status === 'approved' ? (
+                                                        <button onClick={() => setActiveClassId(course.id)} className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">Go to Stations</button>
+                                                    ) : todaysCheckIn?.status === 'pending' ? (
+                                                        <p className="text-center text-sm font-medium text-yellow-700">Check-in Pending</p>
+                                                    ) : (
+                                                        <button onClick={() => handlePrerequisiteCheckin(course)} className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">Check In for Today</button>
+                                                    )}
+                                                <button onClick={() => handleCancelEnrollment(course.id)} disabled={!canCancel} className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                                                    <LogOut className="mr-2 h-4 w-4" /> Cancel Enrollment
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center py-12 bg-white rounded-xl shadow-lg">
+                            <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome!</h2>
+                            <p className="text-gray-500">You are not enrolled in any courses yet. Visit the Course Catalog to get started.</p>
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <div className="lg:col-span-3">
+                    {(isInstructor || user.isAdmin) && (
+                        <div className="mb-8">
+                            <PendingActions
+                                actions={paginatedPendingActions}
+                                onApprove={handleApproveAction}
+                                onDeny={handleDenyAction}
+                                onNext={() => setPendingActionsPage(p => p + 1)}
+                                onPrev={() => setPendingActionsPage(p => p - 1)}
+                                hasNext={ (pendingActionsPage + 1) * 5 < allPendingActions.length}
+                                hasPrev={pendingActionsPage > 0}
+                            />
+                        </div>
+                    )}
+                    {myAssignments.length > 0 && (
+                        <div className="mb-8 bg-white rounded-xl shadow-lg p-5">
+                            <h3 className="text-lg font-bold text-gray-800 mb-3">My Assignments</h3>
+                            <ul className="space-y-2">
+                                {myAssignments.map(assignment => {
+                                    const isActive = attendanceRecords.some(r => r.userId === user.uid && !r.checkOutTime && (r.stationId === assignment.id || r.classId === assignment.id));
+                                    return (
+                                        <li key={assignment.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                                            <div>
+                                                <p className="font-medium text-gray-800">{assignment.name}</p>
+                                                <p className="text-sm text-gray-500">{assignment.type === 'station' ? classes.find(c => c.id === assignment.classId)?.name : 'Class Lead'}</p>
+                                            </div>
+                                            <button onClick={() => handleInstructorCheckInOut(assignment)} disabled={!isActive && attendanceRecords.some(r => r.userId === user.uid && !r.checkOutTime)} className={`px-4 py-2 text-sm font-medium rounded-md text-white ${isActive ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} disabled:bg-gray-400`}>
+                                                {isActive ? 'Check Out' : 'Check In'}
+                                            </button>
+                                        </li>
+                                    )
+                                })}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default Dashboard;
