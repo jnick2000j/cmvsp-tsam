@@ -4,7 +4,7 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswor
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
 import { UserPlus, LogIn, Mail, ArrowLeft } from 'lucide-react';
-import { INSTRUCTOR_ROLES, SUPPORT_ROLES } from '../constants';
+import { INSTRUCTOR_ROLES, SUPPORT_ROLES, appId } from '../constants';
 
 const AuthComponent = ({ logoUrl, loginTitle }) => {
     const [authView, setAuthView] = useState('login');
@@ -29,9 +29,7 @@ const AuthComponent = ({ logoUrl, loginTitle }) => {
             await setDoc(doc(db, "users", userCredential.user.uid), {
                 firstName: formData.firstName, lastName: formData.lastName, email: userCredential.user.email,
                 address: formData.address, city: formData.city, state: formData.state, zip: formData.zip,
-                phone: formData.phone, 
-                role: 'Student', 
-                uid: userCredential.user.uid,
+                phone: formData.phone, role: 'Student', uid: userCredential.user.uid,
                 nspId: formData.nspId, isAffiliated: formData.isAffiliated, primaryAgency: formData.isAffiliated ? '' : formData.primaryAgency,
                 assignments: {},
                 isApproved: true,
