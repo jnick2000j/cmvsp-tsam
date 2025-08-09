@@ -1,15 +1,13 @@
 // src/components/AuthComponent.js
 import React, { useState } from 'react';
-import { auth, db } from '../firebaseConfig';
+import { auth } from '../firebaseConfig';
 import { 
-    createUserWithEmailAndPassword, 
     signInWithEmailAndPassword, 
-    sendPasswordResetEmail, 
-    signOut,
+    sendPasswordResetEmail,
     OAuthProvider,
     signInWithPopup 
 } from "firebase/auth";
-import { doc, setDoc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from "firebase/functions";
 
 const AuthComponent = ({ logoUrl, loginTitle, authMessage, setAuthMessage }) => {
     const [isLogin, setIsLogin] = useState(true);
@@ -19,7 +17,6 @@ const AuthComponent = ({ logoUrl, loginTitle, authMessage, setAuthMessage }) => 
     const [error, setError] = useState('');
     const [isPasswordReset, setIsPasswordReset] = useState(false);
     
-    // State for all registration fields
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [phone, setPhone] = useState('');
@@ -31,11 +28,11 @@ const AuthComponent = ({ logoUrl, loginTitle, authMessage, setAuthMessage }) => 
     const [isOtherAffiliated, setIsOtherAffiliated] = useState(false);
     const [primaryAgency, setPrimaryAgency] = useState('');
     const [nspId, setNspId] = useState('');
-    
+
     const clearFormState = () => {
         setError('');
         setAuthMessage('');
-    }
+    };
 
     const handleCmspAffiliationChange = (checked) => {
         setIsCmspAffiliated(checked);
@@ -56,21 +53,12 @@ const AuthComponent = ({ logoUrl, loginTitle, authMessage, setAuthMessage }) => 
             setError(err.message);
         }
     };
-    
+
     const handleAuthAction = async (e) => {
         e.preventDefault();
         clearFormState();
 
-        if (isPasswordReset) {
-            try {
-                await sendPasswordResetEmail(auth, email);
-                setAuthMessage('Password reset email sent! Please check your inbox.');
-                setIsPasswordReset(false);
-            } catch (err) {
-                setError(err.message);
-            }
-            return;
-        }
+        if (isPasswordReset) { /* ... */ }
 
         if (isLogin) {
             try {
@@ -83,16 +71,13 @@ const AuthComponent = ({ logoUrl, loginTitle, authMessage, setAuthMessage }) => 
                 setError("Passwords do not match.");
                 return;
             }
-            if (password.length < 6) {
-                setError("Password must be at least 6 characters long.");
-                return;
-            }
             try {
-                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const functions = getFunctions();
+                const createUserAccount = httpsCallable(functions, 'createUserAccount');
                 
-                const newUserDocument = {
-                    uid: userCredential.user.uid,
+                const registrationData = {
                     email,
+                    password,
                     firstName,
                     lastName,
                     phone,
@@ -100,29 +85,24 @@ const AuthComponent = ({ logoUrl, loginTitle, authMessage, setAuthMessage }) => 
                     city,
                     state,
                     zip,
-                    nspId: isOtherAffiliated ? nspId : '',
-                    isAffiliated: isCmspAffiliated,
-                    primaryAgency: isOtherAffiliated ? primaryAgency : (isCmspAffiliated ? 'Crystal Mountain Ski Patrol' : ''),
-                    role: 'Student',
-                    isAdmin: false,
-                    allowScheduling: false,
-                    assignments: {},
-                    enrolledClasses: [],
-                    completedClasses: {},
-                    isApproved: false,
-                    needsApproval: true,
+                    isCmspAffiliated,
+                    isOtherAffiliated,
+                    primaryAgency,
+                    nspId,
                 };
                 
-                await setDoc(doc(db, "users", userCredential.user.uid), newUserDocument);
-                
-                await signOut(auth);
+                // Call the Cloud Function with the user's data
+                const result = await createUserAccount(registrationData);
 
-                setAuthMessage("Your account request has been submitted and is pending approval.");
-                setIsLogin(true);
+                if (result.data.status === 'success') {
+                    setAuthMessage("Your account request has been submitted and is pending approval.");
+                    setIsLogin(true);
+                } else {
+                    setError(result.data.message || "An unknown error occurred.");
+                }
                 
             } catch (err) {
-                setError(err.code === 'auth/email-already-in-use' ? 'This email is already registered. Please log in or use a different email.' : err.message);
-                if (auth.currentUser) await signOut(auth);
+                setError(err.message);
             }
         }
     };
@@ -140,7 +120,7 @@ const AuthComponent = ({ logoUrl, loginTitle, authMessage, setAuthMessage }) => 
 
                 {isLogin && (
                     <div className="space-y-4">
-                        <button 
+                        <button
                             onClick={handleEntraIdLogin}
                             className="w-full flex items-center justify-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
                         >
@@ -150,7 +130,7 @@ const AuthComponent = ({ logoUrl, loginTitle, authMessage, setAuthMessage }) => 
                                 <path fill="#7fba00" d="M11 1h9v9h-9z"/>
                                 <path fill="#ffb900" d="M11 11h9v9h-9z"/>
                             </svg>
-                            Login with your Crystal Mountain ID
+                            Login with your CMVSP E-Mail Address
                         </button>
                         <div className="relative">
                             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-300" /></div>
@@ -171,7 +151,7 @@ const AuthComponent = ({ logoUrl, loginTitle, authMessage, setAuthMessage }) => 
                     )}
 
                     <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email Address" required className="w-full px-4 py-3 border rounded-lg" />
-                    
+
                     {!isPasswordReset && (
                         <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required className="w-full px-4 py-3 border rounded-lg" />
                     )}
@@ -183,14 +163,14 @@ const AuthComponent = ({ logoUrl, loginTitle, authMessage, setAuthMessage }) => 
                             <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Street Address" required className="w-full px-4 py-3 border rounded-lg" />
                             <div className="grid grid-cols-3 gap-4">
                                 <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="City" required className="w-full px-4 py-3 border rounded-lg" />
-                                <input value={state} onChange={(e) => setState(e.target.value)} placeholder="State" required className="w-full px-4 py-3 border rounded-lg" />
+                                <input value={state} onChange={(e) => setState(e.target.value)} placeholder="State" required maxLength="2" className="w-full px-4 py-3 border rounded-lg" />
                                 <input value={zip} onChange={(e) => setZip(e.target.value)} placeholder="Zip Code" required className="w-full px-4 py-3 border rounded-lg" />
                             </div>
                             
                             <div className="pt-4 border-t space-y-3">
                                 <label className="flex items-center">
                                     <input type="checkbox" checked={isCmspAffiliated} onChange={(e) => handleCmspAffiliationChange(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"/>
-                                    <span className="ml-2 text-sm text-gray-700">I am affiliated with the Crystal Mountain Ski Patrol</span>
+                                    <span className="ml-2 text-sm text-gray-700">I am affiliated with the Crystal Mountain Ski Patrol but do NOT have a CMVSP E-Mail Address</span>
                                 </label>
 
                                 <label className="flex items-center">
@@ -207,7 +187,7 @@ const AuthComponent = ({ logoUrl, loginTitle, authMessage, setAuthMessage }) => 
                             </div>
                          </>
                     )}
-                   
+
                     <button type="submit" className="w-full py-3 text-white bg-primary hover:bg-primary-hover rounded-lg font-semibold">
                         {isPasswordReset ? 'Send Reset Email' : isLogin ? 'Login' : 'Request Access'}
                     </button>

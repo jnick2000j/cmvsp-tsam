@@ -4,42 +4,37 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     function isAdmin() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
     
     function isApproved() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isApproved == true;
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isApproved == true;
     }
 
-    // --- Rules for the 'users' collection ---
     match /users/{userId} {
-      // A newly authenticated user is now allowed to create their own user document.
-      // The document ID MUST match their authentication UID.
-      allow create: if request.auth.uid == userId;
+      // DENY direct creation of user documents from the client.
+      // The createUserAccount Cloud Function is now responsible for this.
+      allow create: if false;
 
-      // Users can read/update their own profile. Admins can read/update any user's profile.
       allow read, update: if request.auth.uid == userId || isAdmin();
       
-      // Only admins can delete user documents.
       allow delete: if isAdmin();
     }
 
-    // --- Rules for Branding ---
+    match /artifacts/{appId}/public/data/{document=**} {
+      allow read, write: if request.auth != null && isApproved();
+    }
+    
+    // Your other rules remain unchanged.
     match /artifacts/{appId}/public/data/branding/settings {
       allow read: if true;
       allow write: if isAdmin();
     }
-
-    // --- Rules for Role Requests ---
     match /artifacts/{appId}/public/data/roleRequests/{docId} {
       allow create: if true;
       allow read, delete: if isAdmin();
-    }
-
-    // --- General Data Access Rule ---
-    // A user must be logged in AND have an approved account to read or write data.
-    match /artifacts/{appId}/public/data/{document=**} {
-      allow read, write: if request.auth != null && isApproved();
     }
   }
 }
