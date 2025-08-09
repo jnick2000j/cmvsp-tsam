@@ -11,10 +11,11 @@ import WaiverManagement from './WaiverManagement';
 import Branding from './Branding';
 import ShiftManagement from './ShiftManagement';
 import TimeClockManagement from './TimeClockManagement';
-import { Search, UserPlus, UploadCloud, Edit, Trash2, Check, PlusCircle, Layers, BookOpen, UserCog, FileSignature, Mail, Copy, Image as ImageIcon, Calendar, Smartphone } from 'lucide-react';
+import { Search, UserPlus, UploadCloud, Edit, Trash2, Check, PlusCircle, Layers, BookOpen, UserCog, FileSignature, Mail, Copy, Image as ImageIcon, Calendar, Smartphone, X, CheckCircle } from 'lucide-react';
 import Icon from './Icon';
 
 const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmAction, waivers, branding, onBrandingUpdate }) => {
+    // ... (state variables remain the same) ...
     const [adminView, setAdminView] = useState('users');
     const [searchTerm, setSearchTerm] = useState('');
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -29,6 +30,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
     const [timeClocks, setTimeClocks] = useState([]);
 
     useEffect(() => {
+        // ... (useEffect hook remains the same) ...
         const shiftsQuery = query(collection(db, `artifacts/${appId}/public/data/shifts`), orderBy("date", "desc"));
         const unsubscribeShifts = onSnapshot(shiftsQuery, (snapshot) => {
             setShifts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -46,8 +48,8 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
     }, []);
 
     const instructors = useMemo(() => allUsers.filter(u => INSTRUCTOR_ROLES.includes(u.role) || u.isAdmin), [allUsers]);
-    
-    // ... (rest of handler functions remain the same)
+
+    // ... (all handler functions remain the same) ...
     const handleCopyClass = async (classToCopy) => {
         setMessage('');
         setError('');
@@ -211,7 +213,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             console.error(err);
         }
     };
-    
+
     const filteredUsers = allUsers.filter(user => `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) || user.email.toLowerCase().includes(searchTerm.toLowerCase()) || (user.role && user.role.toLowerCase().includes(searchTerm.toLowerCase())) || (user.ability && user.ability.toLowerCase().includes(searchTerm.toLowerCase())));
 
     return (
@@ -223,6 +225,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="border-b border-gray-200 mb-6">
                     <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                         {/* ... (Nav buttons remain the same) ... */}
                         <button onClick={() => setAdminView('classes')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'classes' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Layers className="mr-2" size={18}/> Class Management</button>
                         <button onClick={() => setAdminView('stations')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'stations' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><BookOpen className="mr-2" size={18}/> Station Management</button>
                         <button onClick={() => setAdminView('users')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'users' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserCog className="mr-2" size={18}/> User Management</button>
@@ -252,6 +255,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                                         <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Name</th>
                                         <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Training Role</th>
                                         <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Patrol Ability</th>
+                                        <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Scheduling Access</th>
                                         <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th>
                                     </tr>
                                 </thead>
@@ -275,6 +279,9 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                                                 {user.ability || 'N/A'}
                                             </td>
+                                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                                                {user.allowScheduling ? <CheckCircle className="h-5 w-5 text-green-500" /> : <X className="h-5 w-5 text-red-500" />}
+                                            </td>
                                             <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                                                 <div className="flex items-center justify-end gap-2">
                                                     {INSTRUCTOR_ROLES.includes(user.role) && !user.isApproved && 
@@ -292,6 +299,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         </div></div></div></div>
                     </>
                 )}
+                {/* ... (Other admin views remain the same) ... */}
                 {adminView === 'classes' && (
                     <>
                         <div className="sm:flex sm:items-center sm:justify-between"><div><h2 className="text-2xl font-bold text-gray-900">Classes</h2><p className="mt-1 text-sm text-gray-500">Manage the classes that contain stations.</p></div><div className="mt-4 sm:mt-0"><button onClick={handleAddClass} className="w-full flex items-center justify-center px-4 py-2 bg-primary text-white rounded-md shadow-sm hover:bg-primary-hover"><PlusCircle className="h-5 w-5 mr-2" /> Add New Class</button></div></div>

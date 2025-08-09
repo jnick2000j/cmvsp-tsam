@@ -1,7 +1,7 @@
 // src/components/UserEditModal.js
 import React, { useState, useEffect } from 'react';
 import { doc, updateDoc, setDoc } from 'firebase/firestore';
-import { db, auth as mainAuth, firebaseConfig } from '../firebaseConfig'; // Import firebaseConfig
+import { db, auth as mainAuth, firebaseConfig } from '../firebaseConfig';
 import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROLS, PATROL_LEADER_ROLES, PATROL_ROLES } from '../constants';
 import { createUserWithEmailAndPassword, getAuth, sendEmailVerification } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
@@ -17,7 +17,8 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
             setFormData({ 
                 firstName: '', lastName: '', email: '', phone: '', address: '', city: '', state: '', zip: '', 
                 role: 'Student', isAdmin: false, assignments: {}, nspId: '', isAffiliated: true, primaryAgency: '', 
-                password: '', confirmPassword: '', patrolAssignment: '', ability: '', timeClockPin: '' 
+                password: '', confirmPassword: '', patrolAssignment: '', ability: '', timeClockPin: '',
+                allowScheduling: false // Default value for new users
             });
         }
     }, [userToEdit]);
@@ -86,6 +87,7 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
                     patrolAssignment: formData.patrolAssignment,
                     ability: formData.ability,
                     timeClockPin: formData.timeClockPin,
+                    allowScheduling: formData.allowScheduling,
                     assignments: {},
                     enrolledClasses: [],
                     completedClasses: {},
@@ -112,6 +114,7 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
                     <div className="p-6 space-y-4">
                         {error && <p className="text-red-500 bg-red-50 p-3 rounded-lg text-sm">{error}</p>}
                         
+                        {/* ... (Other form fields remain the same) ... */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div><label className="block text-sm font-medium text-gray-700">First Name</label><input name="firstName" value={formData.firstName || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                             <div><label className="block text-sm font-medium text-gray-700">Last Name</label><input name="lastName" value={formData.lastName || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
@@ -184,7 +187,19 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
                                     </optgroup>
                                 </select>
                             </div>
-                            <div><label className="block text-sm font-medium text-gray-700">Permissions</label><label className="mt-2 flex items-center"><input type="checkbox" name="isAdmin" checked={formData.isAdmin || false} onChange={handleInputChange} className="rounded text-indigo-600" /> <span className="ml-2">Administrator</span></label></div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Permissions</label>
+                                <div className="mt-2 space-y-2">
+                                    <label className="flex items-center">
+                                        <input type="checkbox" name="isAdmin" checked={formData.isAdmin || false} onChange={handleInputChange} className="rounded text-indigo-600" />
+                                        <span className="ml-2">Administrator</span>
+                                    </label>
+                                    <label className="flex items-center">
+                                        <input type="checkbox" name="allowScheduling" checked={formData.allowScheduling || false} onChange={handleInputChange} className="rounded text-indigo-600" />
+                                        <span className="ml-2">Allow Scheduling System Access</span>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div className="p-6 bg-gray-50 border-t flex justify-end space-x-3">

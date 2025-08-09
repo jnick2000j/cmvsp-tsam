@@ -27,7 +27,7 @@ import { generateClassPdf } from './utils/pdfGenerator';
 import { LayoutDashboard, ClipboardList, Handshake, Library, Clock, User, Shield, Calendar, BarChart, Smartphone } from 'lucide-react';
 
 export default function App() {
-    // ... (most state variables remain the same)
+    // ... (state variables remain the same) ...
     const [user, setUser] = useState(null);
     const [isAuthLoading, setIsAuthLoading] = useState(true);
     const [isDataLoading, setIsDataLoading] = useState(true);
@@ -58,7 +58,7 @@ export default function App() {
     // Scheduling State
     const [shifts, setShifts] = useState([]);
     const [timeClockEntries, setTimeClockEntries] = useState([]);
-    const [timeClocks, setTimeClocks] = useState([]); // New state for time clock devices
+    const [timeClocks, setTimeClocks] = useState([]);
 
     const [error, setError] = useState('');
     const [view, setView] = useState('dashboard');
@@ -83,6 +83,7 @@ export default function App() {
     const isTimeClockView = window.location.pathname === '/timeclock';
 
     useEffect(() => {
+        // ... (useEffect for branding and auth remains the same) ...
         const brandingRef = doc(db, `artifacts/${appId}/public/data/branding`, 'settings');
         const unsubBranding = onSnapshot(brandingRef, (doc) => {
             if (doc.exists()) {
@@ -112,6 +113,7 @@ export default function App() {
     }, []);
 
     useEffect(() => {
+        // ... (useEffect for data fetching remains the same) ...
         if (isAuthLoading || (!user && !isTimeClockView)) {
             setIsDataLoading(false);
             return;
@@ -130,7 +132,7 @@ export default function App() {
             roleRequests: setRoleRequests,
             shifts: setShifts,
             timeClockEntries: setTimeClockEntries,
-            timeclocks: setTimeClocks // Fetch time clock devices
+            timeclocks: setTimeClocks
         };
 
         const unsubscribers = Object.entries(collectionsToWatch).map(([name, setter]) => {
@@ -153,6 +155,7 @@ export default function App() {
         return assignments;
     }, [stations, classes, user]);
 
+    // ... (handler functions remain the same) ...
     const handleSignOut = () => { setView('dashboard'); signOut(auth); };
     const handleNavClick = (mainView, sub = '') => { setView(mainView); setSubView(sub); };
 
@@ -215,6 +218,7 @@ export default function App() {
     const isInstructor = user.isAdmin || INSTRUCTOR_ROLES.includes(user.role);
     const isSupport = SUPPORT_ROLES.includes(user.role);
     const isPatrolLeadership = user.isAdmin || PATROL_LEADER_ROLES.includes(user.ability);
+    const hasSchedulingAccess = user.isAdmin || user.allowScheduling; // New access control variable
 
     const renderContent = () => {
         switch (view) {
@@ -224,7 +228,8 @@ export default function App() {
             case 'help': return <HelpTabs {...{ user, stations, classes, addUpdate: () => {}, instructorSignups, supportSignups, subView, setSubView }} />;
             case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: () => {}, enrollmentError, branding }} />;
             case 'profile': return <ProfileManagement {...{ user }} />;
-            case 'scheduling': return <Scheduling user={user} allUsers={allUsers} shifts={shifts} />;
+            case 'scheduling': 
+                return hasSchedulingAccess ? <Scheduling user={user} allUsers={allUsers} shifts={shifts} /> : <div>Access Denied</div>;
             case 'dashboard':
             default:
                 return <Dashboard {...{ 
@@ -243,7 +248,7 @@ export default function App() {
                     allPendingActions: [],
                     timeClockEntries,
                     allUsers,
-                    isPatrolLeadership
+                    isPatrolLeadership: hasSchedulingAccess && isPatrolLeadership // Pass access flag
                 }} />;
         }
     };
@@ -267,7 +272,7 @@ export default function App() {
                     </div>
                     <nav className="flex space-x-4 border-t border-gray-200 -mb-px overflow-x-auto">
                         <button onClick={() => handleNavClick('dashboard')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'dashboard' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><LayoutDashboard className="mr-1.5 h-4 w-4" />My Dashboard</button>
-                        <button onClick={() => handleNavClick('scheduling')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'scheduling' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Calendar className="mr-1.5 h-4 w-4" />Scheduling</button>
+                        {hasSchedulingAccess && <button onClick={() => handleNavClick('scheduling')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'scheduling' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Calendar className="mr-1.5 h-4 w-4" />Scheduling</button>}
                         {(isInstructor || user.isAdmin) && (<button onClick={() => handleNavClick('attendance', 'checkInOut')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'attendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ClipboardList className="mr-1.5 h-4 w-4" />Training Attendance</button>)}
                         {((INSTRUCTOR_ROLES.includes(user.role) && user.isApproved) || user.isAdmin || isSupport) && (<button onClick={() => handleNavClick('help', 'teaching')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'help' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Handshake className="mr-1.5 h-4 w-4" />Help us Out!</button>)}
                         <button onClick={() => handleNavClick('catalog')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'catalog' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Library className="mr-1.5 h-4 w-4" />Course Catalog</button>
