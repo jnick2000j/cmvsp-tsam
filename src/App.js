@@ -27,7 +27,6 @@ import { generateClassPdf } from './utils/pdfGenerator';
 import { LayoutDashboard, ClipboardList, Handshake, Library, Clock, User, Shield, Calendar, BarChart, Smartphone } from 'lucide-react';
 
 export default function App() {
-    // ... (state variables remain the same) ...
     const [user, setUser] = useState(null);
     const [isAuthLoading, setIsAuthLoading] = useState(true);
     const [isDataLoading, setIsDataLoading] = useState(true);
@@ -60,7 +59,6 @@ export default function App() {
     const [timeClockEntries, setTimeClockEntries] = useState([]);
     const [timeClocks, setTimeClocks] = useState([]);
 
-    // New state for login errors
     const [loginError, setLoginError] = useState('');
 
 
@@ -83,11 +81,9 @@ export default function App() {
     const [isUploading, setIsUploading] = useState(false);
 
 
-    // This is a simple router. In a larger app, you would use a library like react-router-dom
     const isTimeClockView = window.location.pathname === '/timeclock';
 
     useEffect(() => {
-        // ... (branding listener remains the same) ...
         const brandingRef = doc(db, `artifacts/${appId}/public/data/branding`, 'settings');
         const unsubBranding = onSnapshot(brandingRef, (doc) => {
             if (doc.exists()) {
@@ -102,7 +98,7 @@ export default function App() {
         });
 
         const unsubAuth = onAuthStateChanged(auth, (authUser) => {
-            setLoginError(''); // Clear any previous login errors
+            setLoginError('');
             if (authUser) {
                 const unsubUser = onSnapshot(doc(db, "users", authUser.uid), (userDoc) => {
                     if (userDoc.exists()) {
@@ -110,7 +106,6 @@ export default function App() {
                         if (userData.isApproved) {
                             setUser({ uid: authUser.uid, id: userDoc.id, ...userData });
                         } else {
-                            // User is not approved, sign them out and show a message
                             signOut(auth);
                             setLoginError("Your account is pending administrator approval. Please wait for an email notification before logging in.");
                         }
@@ -127,7 +122,6 @@ export default function App() {
     }, []);
 
     useEffect(() => {
-        // ... (data fetching listener remains the same) ...
         if (isAuthLoading || (!user && !isTimeClockView)) {
             setIsDataLoading(false);
             return;
@@ -162,14 +156,13 @@ export default function App() {
     }, [user, isAuthLoading, isTimeClockView]);
 
     const myAssignments = useMemo(() => {
-        // ... (myAssignments logic remains the same) ...
         if (!user) return [];
         const assignments = [];
         stations.forEach(s => { if (user.assignments && user.assignments[s.id]) assignments.push({ ...s, type: 'station' }); });
         classes.forEach(c => { if (c.leadInstructorId === user.uid) assignments.push({ ...c, type: 'class', id: c.id, name: `${c.name} (Lead)` }); });
         return assignments;
     }, [stations, classes, user]);
-
+    
     const usersForApproval = useMemo(() => {
         return allUsers.filter(u => u.needsApproval);
     }, [allUsers]);
@@ -180,10 +173,8 @@ export default function App() {
             isApproved: true,
             needsApproval: false
         });
-        // Optionally, trigger an email to the user here.
     };
     
-    // ... (other handlers remain the same) ...
     const handleSignOut = () => { setView('dashboard'); signOut(auth); };
     const handleNavClick = (mainView, sub = '') => { setView(mainView); setSubView(sub); };
 
@@ -211,7 +202,7 @@ export default function App() {
 
         const activeEntrySnapshot = await getDocs(activeEntryQuery);
 
-        if (activeEntrySnapshot.empty) { // Clocking In
+        if (activeEntrySnapshot.empty) {
             await addDoc(collection(db, `artifacts/${appId}/public/data/timeClockEntries`), {
                 isGuest,
                 userId: isGuest ? null : userId,
@@ -222,7 +213,7 @@ export default function App() {
                 clockInTime: new Date(),
                 clockOutTime: null,
             });
-        } else { // Clocking Out
+        } else {
             const entryDoc = activeEntrySnapshot.docs[0];
             await updateDoc(doc(db, `artifacts/${appId}/public/data/timeClockEntries`, entryDoc.id), {
                 clockOutTime: new Date()
@@ -277,7 +268,7 @@ export default function App() {
                     timeClockEntries,
                     allUsers,
                     isPatrolLeadership: hasSchedulingAccess && isPatrolLeadership,
-                    usersForApproval: usersForApproval,
+                    usersForApproval,
                     onApproveUser: handleApproveUser
                 }} />;
         }
@@ -292,7 +283,7 @@ export default function App() {
                             {branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="h-10" />}
                             <div>
                                 <h1 className="text-2xl font-bold text-gray-900">{branding.mainTitle}</h1>
-                                <p className="text-sm text-gray-500">Welcome, <span className="font-semibold text-accent">{user.firstName} {user.lastName}</span> ({user.ability || user.role})</p>
+                                <p className="text-sm text-gray-500">Welcome, <span className="font-semibold text-accent">{user.firstName} {user.lastName}</span></p>
                             </div>
                         </div>
                         <div className="flex items-center space-x-4">

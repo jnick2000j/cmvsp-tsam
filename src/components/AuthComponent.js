@@ -1,7 +1,15 @@
 // src/components/AuthComponent.js
 import React, { useState } from 'react';
-import { auth, firebaseConfig } from '../firebaseConfig'; // db is no longer needed here
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, getAuth } from "firebase/auth";
+import { auth, db, firebaseConfig } from '../firebaseConfig';
+import { 
+    createUserWithEmailAndPassword, 
+    signInWithEmailAndPassword, 
+    sendPasswordResetEmail, 
+    getAuth,
+    OAuthProvider,
+    signInWithPopup 
+} from "firebase/auth";
+import { doc, setDoc } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 
 const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
@@ -9,11 +17,32 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    // First name, last name, etc. are removed as the Cloud Function handles placeholders
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
     const [isPasswordReset, setIsPasswordReset] = useState(false);
+    
+    // State for all registration fields
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [address, setAddress] = useState('');
+    const [city, setCity] = useState('');
+    const [state, setState] = useState('');
+    const [zip, setZip] = useState('');
+    const [isAffiliated, setIsAffiliated] = useState(false);
+    const [primaryAgency, setPrimaryAgency] = useState('');
+    const [nspId, setNspId] = useState('');
 
+
+    const handleEntraIdLogin = async () => {
+        const provider = new OAuthProvider('microsoft.com');
+        try {
+            await signInWithPopup(auth, provider);
+        } catch (err) {
+            setError(err.message);
+        }
+    };
+    
     const handleAuthAction = async (e) => {
         e.preventDefault();
         setError('');
@@ -36,8 +65,7 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
             } catch (err) {
                 setError(err.message);
             }
-        } else {
-            // Registration Logic
+        } else { // Registration logic
             if (password !== confirmPassword) {
                 setError("Passwords do not match.");
                 return;
@@ -47,21 +75,42 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
                 return;
             }
             try {
-                // We create a temporary app instance to avoid auto-logging in the new user
                 const tempAppName = `temp-user-creation-${Date.now()}`;
                 const tempApp = initializeApp(firebaseConfig, tempAppName);
                 const tempAuth = getAuth(tempApp);
-
-                await createUserWithEmailAndPassword(tempAuth, email, password);
+                const userCredential = await createUserWithEmailAndPassword(tempAuth, email, password);
                 
-                // The onUserCreate Cloud Function will now handle creating the Firestore document.
-                // We no longer need to call setDoc from the client.
+                // Now, create the user document in Firestore
+                const newUserDocument = {
+                    uid: userCredential.user.uid,
+                    email,
+                    firstName,
+                    lastName,
+                    phone,
+                    address,
+                    city,
+                    state,
+                    zip,
+                    nspId: isAffiliated ? nspId : '',
+                    isAffiliated,
+                    primaryAgency: isAffiliated ? primaryAgency : '',
+                    role: 'Student',
+                    isAdmin: false,
+                    allowScheduling: false,
+                    assignments: {},
+                    enrolledClasses: [],
+                    completedClasses: {},
+                    isApproved: false,
+                    needsApproval: true,
+                };
+                
+                await setDoc(doc(db, "users", userCredential.user.uid), newUserDocument);
 
                 setMessage("Registration successful! Your account is now pending administrator approval. You will be notified once you can log in.");
-                setIsLogin(true); // Switch to login view
+                setIsLogin(true);
                 
             } catch (err) {
-                setError(err.message);
+                setError(err.code === 'auth/email-already-in-use' ? 'This email is already registered. Please log in or use a different email.' : err.message);
             }
         }
     };
@@ -71,14 +120,45 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
             <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 space-y-6">
                 <div className="text-center">
                     {logoUrl && <img src={logoUrl} alt="Logo" className="mx-auto h-20 w-auto mb-4"/>}
-                    <h2 className="text-3xl font-bold text-gray-800">{isPasswordReset ? 'Reset Password' : loginTitle}</h2>
+                    <h2 className="text-3xl font-bold text-gray-800">{isPasswordReset ? 'Reset Password' : isLogin ? loginTitle : 'Request Access'}</h2>
                 </div>
 
                 {error && <p className="text-red-500 bg-red-50 p-3 rounded-lg text-sm text-center">{error}</p>}
                 {loginError && <p className="text-red-500 bg-red-50 p-3 rounded-lg text-sm text-center">{loginError}</p>}
                 {message && <p className="text-green-600 bg-green-50 p-3 rounded-lg text-sm text-center">{message}</p>}
 
+                {isLogin && (
+                    <div className="space-y-4">
+                        <button 
+                            onClick={handleEntraIdLogin}
+                            className="w-full flex items-center justify-center py-3 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                            <svg className="h-5 w-5 mr-2" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
+                                <path fill="#f25022" d="M1 1h9v9H1z"/>
+                                <path fill="#00a4ef" d="M1 11h9v9H1z"/>
+                                <path fill="#7fba00" d="M11 1h9v9h-9z"/>
+                                <path fill="#ffb900" d="M11 11h9v9h-9z"/>
+                            </svg>
+                            Login with your Crystal Mountain ID
+                        </button>
+                        <div className="relative">
+                            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-300" /></div>
+                            <div className="relative flex justify-center text-sm"><span className="px-2 bg-white text-gray-500">Or with email</span></div>
+                        </div>
+                    </div>
+                )}
+
+
                 <form onSubmit={handleAuthAction} className="space-y-4">
+                    {!isLogin && (
+                        <>
+                            <div className="grid grid-cols-2 gap-4">
+                                <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First Name" required className="w-full px-4 py-3 border rounded-lg" />
+                                <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last Name" required className="w-full px-4 py-3 border rounded-lg" />
+                            </div>
+                        </>
+                    )}
+
                     <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email Address" required className="w-full px-4 py-3 border rounded-lg" />
                     
                     {!isPasswordReset && (
@@ -86,18 +166,45 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
                     )}
 
                     {!isLogin && (
-                         <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm Password" required className="w-full px-4 py-3 border rounded-lg" />
+                         <>
+                            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm Password" required className="w-full px-4 py-3 border rounded-lg" />
+                             <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Mobile Phone" type="tel" required className="w-full px-4 py-3 border rounded-lg" />
+                            <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Street Address" required className="w-full px-4 py-3 border rounded-lg" />
+                            <div className="grid grid-cols-3 gap-4">
+                                <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="City" required className="w-full px-4 py-3 border rounded-lg" />
+                                <input value={state} onChange={(e) => setState(e.target.value)} placeholder="State" required className="w-full px-4 py-3 border rounded-lg" />
+                                <input value={zip} onChange={(e) => setZip(e.target.value)} placeholder="Zip Code" required className="w-full px-4 py-3 border rounded-lg" />
+                            </div>
+                            
+                            <div className="pt-4 border-t">
+                                <label className="flex items-center">
+                                    <input type="checkbox" checked={isAffiliated} onChange={(e) => setIsAffiliated(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"/>
+                                    <span className="ml-2 text-sm text-gray-700">I am affiliated with a National Ski Patrol agency</span>
+                                </label>
+
+                                {isAffiliated ? (
+                                    <div className="space-y-4 mt-4">
+                                        <input value={primaryAgency} onChange={(e) => setPrimaryAgency(e.target.value)} placeholder="Patrol or Agency Name" required={isAffiliated} className="w-full px-4 py-3 border rounded-lg" />
+                                        <input value={nspId} onChange={(e) => setNspId(e.target.value)} placeholder="NSP Identification Number" required={isAffiliated} className="w-full px-4 py-3 border rounded-lg" />
+                                    </div>
+                                ) : (
+                                    <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm text-gray-600">
+                                        You have selected "Not Affiliated with a Patrol or Agency".
+                                    </div>
+                                )}
+                            </div>
+                         </>
                     )}
                    
                     <button type="submit" className="w-full py-3 text-white bg-primary hover:bg-primary-hover rounded-lg font-semibold">
-                        {isPasswordReset ? 'Send Reset Email' : isLogin ? 'Login' : 'Register'}
+                        {isPasswordReset ? 'Send Reset Email' : isLogin ? 'Login' : 'Request Access'}
                     </button>
                 </form>
 
                 <div className="text-center text-sm">
                     {isLogin ? (
                         <>
-                            <button onClick={() => { setIsLogin(false); setError(''); setMessage(''); }} className="font-medium text-accent hover:text-accent-hover">Don't have an account? Register</button>
+                            <button onClick={() => { setIsLogin(false); setError(''); setMessage(''); }} className="font-medium text-accent hover:text-accent-hover">Request Access to Crystal Mountain TSAM</button>
                             <br/>
                             <button onClick={() => { setIsPasswordReset(true); setError(''); setMessage(''); }} className="font-medium text-accent hover:text-accent-hover mt-2">Forgot Password?</button>
                         </>
