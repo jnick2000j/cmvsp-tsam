@@ -1,6 +1,6 @@
 // src/components/Dashboard.js
 import React, { useMemo } from 'react';
-import { LogOut } from 'lucide-react';
+import { LogOut, UserCheck } from 'lucide-react';
 import PendingActions from './PendingActions'; 
 import { PATROL_LEADER_ROLES } from '../constants';
 
@@ -24,10 +24,12 @@ const Dashboard = ({
     setPendingActionsPage,
     pendingActionsPage,
     allPendingActions,
-    // New props for consolidated dashboard
     timeClockEntries,
     allUsers,
-    isPatrolLeadership
+    isPatrolLeadership,
+    // New Props for account approval
+    usersForApproval,
+    onApproveUser
 }) => {
 
     const todayISO = new Date().toISOString().split('T')[0];
@@ -144,9 +146,28 @@ const Dashboard = ({
                         </div>
                     )}
                     
-                    {(isInstructor || user.isAdmin) && (
-                        <div>
-                             <h2 className="text-2xl font-bold text-gray-900 mb-4">Pending Training Actions</h2>
+                    {(user.isAdmin) && (
+                         <div>
+                            <h2 className="text-2xl font-bold text-gray-900 mb-4">Pending Actions</h2>
+                            {usersForApproval.length > 0 && (
+                                <div className="bg-white rounded-xl shadow-lg p-5 mb-8">
+                                    <h3 className="text-lg font-bold text-gray-800 mb-3">New User Accounts for Approval</h3>
+                                    <ul className="space-y-2">
+                                        {usersForApproval.map(u => (
+                                            <li key={u.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                                                <div>
+                                                    <p className="font-medium text-gray-800">{u.firstName} {u.lastName}</p>
+                                                    <p className="text-sm text-gray-500">{u.email}</p>
+                                                </div>
+                                                <button onClick={() => onApproveUser(u.id)} className="px-3 py-1.5 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 flex items-center">
+                                                    <UserCheck className="h-4 w-4 mr-1.5"/> Approve
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
                             <PendingActions
                                 actions={paginatedPendingActions}
                                 onApprove={handleApproveAction}
@@ -158,6 +179,7 @@ const Dashboard = ({
                             />
                         </div>
                     )}
+
                     {myAssignments.length > 0 && (
                         <div className="bg-white rounded-xl shadow-lg p-5">
                             <h3 className="text-lg font-bold text-gray-800 mb-3">My Training Assignments</h3>

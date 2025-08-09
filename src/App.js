@@ -60,6 +60,10 @@ export default function App() {
     const [timeClockEntries, setTimeClockEntries] = useState([]);
     const [timeClocks, setTimeClocks] = useState([]);
 
+    // New state for login errors
+    const [loginError, setLoginError] = useState('');
+
+
     const [error, setError] = useState('');
     const [view, setView] = useState('dashboard');
     const [subView, setSubView] = useState('');
@@ -83,7 +87,7 @@ export default function App() {
     const isTimeClockView = window.location.pathname === '/timeclock';
 
     useEffect(() => {
-        // ... (useEffect for branding and auth remains the same) ...
+        // ... (branding listener remains the same) ...
         const brandingRef = doc(db, `artifacts/${appId}/public/data/branding`, 'settings');
         const unsubBranding = onSnapshot(brandingRef, (doc) => {
             if (doc.exists()) {
@@ -98,9 +102,19 @@ export default function App() {
         });
 
         const unsubAuth = onAuthStateChanged(auth, (authUser) => {
+            setLoginError(''); // Clear any previous login errors
             if (authUser) {
-                const unsubUser = onSnapshot(doc(db, "users", authUser.uid), (doc) => {
-                    setUser(doc.exists() ? { uid: authUser.uid, id: doc.id, ...doc.data() } : null);
+                const unsubUser = onSnapshot(doc(db, "users", authUser.uid), (userDoc) => {
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
+                        if (userData.isApproved) {
+                            setUser({ uid: authUser.uid, id: userDoc.id, ...userData });
+                        } else {
+                            // User is not approved, sign them out and show a message
+                            signOut(auth);
+                            setLoginError("Your account is pending administrator approval. Please wait for an email notification before logging in.");
+                        }
+                    }
                     setIsAuthLoading(false);
                 });
                 return () => unsubUser();
@@ -113,7 +127,7 @@ export default function App() {
     }, []);
 
     useEffect(() => {
-        // ... (useEffect for data fetching remains the same) ...
+        // ... (data fetching listener remains the same) ...
         if (isAuthLoading || (!user && !isTimeClockView)) {
             setIsDataLoading(false);
             return;
@@ -148,6 +162,7 @@ export default function App() {
     }, [user, isAuthLoading, isTimeClockView]);
 
     const myAssignments = useMemo(() => {
+        // ... (myAssignments logic remains the same) ...
         if (!user) return [];
         const assignments = [];
         stations.forEach(s => { if (user.assignments && user.assignments[s.id]) assignments.push({ ...s, type: 'station' }); });
@@ -155,7 +170,20 @@ export default function App() {
         return assignments;
     }, [stations, classes, user]);
 
-    // ... (handler functions remain the same) ...
+    const usersForApproval = useMemo(() => {
+        return allUsers.filter(u => u.needsApproval);
+    }, [allUsers]);
+
+    const handleApproveUser = async (userId) => {
+        const userRef = doc(db, 'users', userId);
+        await updateDoc(userRef, {
+            isApproved: true,
+            needsApproval: false
+        });
+        // Optionally, trigger an email to the user here.
+    };
+    
+    // ... (other handlers remain the same) ...
     const handleSignOut = () => { setView('dashboard'); signOut(auth); };
     const handleNavClick = (mainView, sub = '') => { setView(mainView); setSubView(sub); };
 
@@ -212,17 +240,17 @@ export default function App() {
     }
 
     if (!user) {
-        return <AuthComponent logoUrl={branding.siteLogo} loginTitle={branding.loginTitle} />;
+        return <AuthComponent logoUrl={branding.siteLogo} loginTitle={branding.loginTitle} loginError={loginError} />;
     }
     
     const isInstructor = user.isAdmin || INSTRUCTOR_ROLES.includes(user.role);
     const isSupport = SUPPORT_ROLES.includes(user.role);
     const isPatrolLeadership = user.isAdmin || PATROL_LEADER_ROLES.includes(user.ability);
-    const hasSchedulingAccess = user.isAdmin || user.allowScheduling; // New access control variable
+    const hasSchedulingAccess = user.isAdmin || user.allowScheduling; 
 
     const renderContent = () => {
         switch (view) {
-            case 'admin': return <AdminPortal {...{ currentUser: user, stations, classes, allUsers, setConfirmAction, waivers, branding, onBrandingUpdate: setBranding }} />;
+            case 'admin': return <AdminPortal {...{ currentUser: user, stations, classes, allUsers, setConfirmAction, waivers, branding, onBrandingUpdate: setBranding, onApproveUser: handleApproveUser }} />;
             case 'trainingHistory': return <TrainingHistory {...{ user, allUsers, classes, stations, checkIns, generateClassPdf }} />;
             case 'attendance': return <AttendanceTabs {...{ user, allUsers, classes, stations, attendanceRecords, subView, setSubView }} />;
             case 'help': return <HelpTabs {...{ user, stations, classes, addUpdate: () => {}, instructorSignups, supportSignups, subView, setSubView }} />;
@@ -248,7 +276,9 @@ export default function App() {
                     allPendingActions: [],
                     timeClockEntries,
                     allUsers,
-                    isPatrolLeadership: hasSchedulingAccess && isPatrolLeadership // Pass access flag
+                    isPatrolLeadership: hasSchedulingAccess && isPatrolLeadership,
+                    usersForApproval: usersForApproval,
+                    onApproveUser: handleApproveUser
                 }} />;
         }
     };
