@@ -3,10 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
 import { sendPasswordResetEmail } from 'firebase/auth';
-import { User, Shield, Briefcase, Mail, Phone, Home, Key } from 'lucide-react';
+import { User, Shield, Briefcase, Key } from 'lucide-react';
 
 const ProfileManagement = ({ user }) => {
     const [formData, setFormData] = useState({});
+    const [newPin, setNewPin] = useState('');
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
 
@@ -20,7 +21,6 @@ const ProfileManagement = ({ user }) => {
                 city: user.city || '',
                 state: user.state || '',
                 zip: user.zip || '',
-                timeClockPin: '',
             });
         }
     }, [user]);
@@ -41,20 +41,35 @@ const ProfileManagement = ({ user }) => {
             console.error(err);
         }
     };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    
+    const handlePinUpdate = async () => {
         setMessage('');
         setError('');
 
-        if (formData.timeClockPin && (formData.timeClockPin.length < 4 || !/^\d+$/.test(formData.timeClockPin))) {
+        if (!newPin || newPin.length < 4 || !/^\d+$/.test(newPin)) {
             setError("New Time Clock PIN must be at least 4 digits and contain only numbers.");
             return;
         }
 
         try {
             const userRef = doc(db, "users", user.uid);
-            const dataToUpdate = {
+            await updateDoc(userRef, { timeClockPin: newPin });
+            setMessage('Your Time Clock PIN has been updated successfully.');
+            setNewPin(''); // Clear the PIN field after successful submission
+        } catch (err) {
+            setError('Failed to update PIN. Please try again.');
+            console.error(err);
+        }
+    };
+
+    const handleProfileSubmit = async (e) => {
+        e.preventDefault();
+        setMessage('');
+        setError('');
+
+        try {
+            const userRef = doc(db, "users", user.uid);
+            await updateDoc(userRef, {
                 firstName: formData.firstName,
                 lastName: formData.lastName,
                 phone: formData.phone,
@@ -62,15 +77,8 @@ const ProfileManagement = ({ user }) => {
                 city: formData.city,
                 state: formData.state,
                 zip: formData.zip,
-            };
-
-            if (formData.timeClockPin) {
-                dataToUpdate.timeClockPin = formData.timeClockPin;
-            }
-
-            await updateDoc(userRef, dataToUpdate);
+            });
             setMessage('Your profile has been updated successfully.');
-            setFormData(prev => ({ ...prev, timeClockPin: '' }));
         } catch (err) {
             setError('Failed to update profile. Please try again.');
             console.error(err);
@@ -118,10 +126,10 @@ const ProfileManagement = ({ user }) => {
 
                 {/* Right Column: Editable Form */}
                 <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg">
-                     <form onSubmit={handleSubmit} className="space-y-6">
-                        {message && <p className="text-green-600 bg-green-50 p-3 rounded-lg text-sm">{message}</p>}
-                        {error && <p className="text-red-500 bg-red-50 p-3 rounded-lg text-sm">{error}</p>}
-                        
+                    {message && <p className="text-green-600 bg-green-50 p-3 rounded-lg text-sm mb-6">{message}</p>}
+                    {error && <p className="text-red-500 bg-red-50 p-3 rounded-lg text-sm mb-6">{error}</p>}
+                    
+                     <form onSubmit={handleProfileSubmit} className="space-y-6">
                         <div>
                             <h3 className="text-lg font-semibold text-gray-800">Contact Information</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
@@ -140,27 +148,31 @@ const ProfileManagement = ({ user }) => {
                                 <div><label className="block text-sm font-medium text-gray-700">Zip Code</label><input name="zip" value={formData.zip} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                             </div>
                         </div>
-
-                         <div className="pt-6 border-t">
-                            <h3 className="text-lg font-semibold text-gray-800">Security</h3>
-                             <div className="mt-4">
-                                <label className="block text-sm font-medium text-gray-700">New Time Clock PIN</label>
-                                <input name="timeClockPin" type="password" value={formData.timeClockPin} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" placeholder="Enter a new 4+ digit PIN"/>
-                                <p className="mt-1 text-xs text-gray-500">Leave this field blank to keep your current PIN.</p>
-                            </div>
-                            <div className="mt-4">
-                                <button type="button" onClick={handlePasswordReset} className="flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                                    <Key className="h-4 w-4 mr-2" /> Send Password Reset Email
-                                </button>
-                            </div>
-                        </div>
-
                         <div className="flex justify-end pt-6 border-t">
                             <button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-lg shadow-md hover:bg-primary-hover">
                                 Update Profile
                             </button>
                         </div>
                     </form>
+
+                     <div className="pt-6 border-t mt-6">
+                        <h3 className="text-lg font-semibold text-gray-800">Security</h3>
+                         <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700">New Time Clock PIN</label>
+                            <div className="flex items-center space-x-4 mt-1">
+                                <input name="timeClockPin" type="password" value={newPin} onChange={(e) => setNewPin(e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm" placeholder="Enter a new 4+ digit PIN"/>
+                                <button type="button" onClick={handlePinUpdate} className="px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 whitespace-nowrap">
+                                    Update PIN
+                                </button>
+                            </div>
+                        </div>
+                        <div className="mt-4">
+                            <button type="button" onClick={handlePasswordReset} className="flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                <Key className="h-4 w-4 mr-2" /> Send Password Reset Email
+                            </button>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>

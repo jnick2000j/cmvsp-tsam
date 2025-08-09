@@ -1,29 +1,64 @@
 // src/components/UserEditModal.js
 import React, { useState, useEffect } from 'react';
-import { doc, updateDoc, setDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
-import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROLS, PATROL_LEADER_ROLES, PATROL_ROLES } from '../constants';
-// Removed auth imports as they are not needed for editing
+import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROLS, PATROL_LEADER_ROLES, PATROL_ROLES, NSP_PATROLS } from '../constants';
 
 const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
     const [formData, setFormData] = useState({});
     const [error, setError] = useState('');
+    
+    const [selectedAgency, setSelectedAgency] = useState('');
+    const [isOtherAgency, setIsOtherAgency] = useState(false);
 
     useEffect(() => {
         if (userToEdit) {
-            setFormData({ ...userToEdit });
-        } else {
-            // "Add User" is now handled by the registration form.
-            // This modal is now only for editing existing users.
-            setFormData({}); 
+            const initialData = { ...userToEdit };
+            const agency = initialData.primaryAgency || '';
+            
+            if (!agency) {
+                // Default to Crystal Mountain Volunteer if no agency is set
+                setSelectedAgency('Crystal Mountain - Volunteer Patrol');
+                setIsOtherAgency(false);
+                setFormData({
+                    ...initialData,
+                    primaryAgency: 'Crystal Mountain - Volunteer Patrol',
+                    isAffiliated: true,
+                });
+            } else if (NSP_PATROLS.includes(agency)) {
+                setSelectedAgency(agency);
+                setIsOtherAgency(false);
+                setFormData(initialData);
+            } else {
+                setSelectedAgency('Other');
+                setIsOtherAgency(true);
+                setFormData(initialData);
+            }
         }
     }, [userToEdit]);
 
-    if (!isOpen || !userToEdit) return null; // Only render if editing a user
+    if (!isOpen || !userToEdit) return null;
 
     const handleInputChange = (e) => {
         const { name, value, type, checked } = e.target;
         setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value });
+    };
+
+    const handleAgencyChange = (e) => {
+        const value = e.target.value;
+        setSelectedAgency(value);
+
+        if (value === 'Other') {
+            setIsOtherAgency(true);
+            setFormData({ ...formData, primaryAgency: '' });
+        } else if (value === 'Not Affiliated') {
+            setIsOtherAgency(false);
+            setFormData({ ...formData, primaryAgency: '', isAffiliated: false, nspId: '' });
+        } else {
+            setIsOtherAgency(false);
+            const isCmsp = value.includes('Crystal Mountain');
+            setFormData({ ...formData, primaryAgency: value, isAffiliated: isCmsp });
+        }
     };
 
     const handleSubmit = async (e) => {
@@ -36,10 +71,18 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
 
         try {
             const dataToSave = { ...formData };
-            if (!dataToSave.isAffiliated) {
+            
+            if (selectedAgency === 'Not Affiliated') {
                 dataToSave.primaryAgency = '';
+                dataToSave.isAffiliated = false;
                 dataToSave.nspId = '';
+            } else if (selectedAgency === 'Other') {
+                dataToSave.isAffiliated = false;
+            } else {
+                dataToSave.primaryAgency = selectedAgency;
+                dataToSave.isAffiliated = selectedAgency.includes('Crystal Mountain');
             }
+
             delete dataToSave.id; 
             delete dataToSave.uid;
             
@@ -106,16 +149,32 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
                         </div>
 
                          <div className="border-t pt-4 space-y-4">
-                            <div className="flex items-center">
-                                <input type="checkbox" name="isAffiliated" id="isAffiliatedEdit" checked={formData.isAffiliated || false} onChange={handleInputChange} className="h-4 w-4 text-indigo-600 border-gray-300 rounded" />
-                                <label htmlFor="isAffiliatedEdit" className="ml-2 block text-sm text-gray-900">Affiliated with a National Ski Patrol Agency</label>
+                            <label className="block text-sm font-medium text-gray-700">Affiliation</label>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <select value={selectedAgency} onChange={handleAgencyChange} className="w-full border-gray-300 rounded-md shadow-sm">
+                                    <option value="Not Affiliated">Not Affiliated</option>
+                                    <optgroup label="Host Patrol">
+                                        {NSP_PATROLS.slice(0, 2).map(p => <option key={p} value={p}>{p}</option>)}
+                                    </optgroup>
+                                    <optgroup label="Other Patrols">
+                                        {NSP_PATROLS.slice(2).map(p => <option key={p} value={p}>{p}</option>)}
+                                    </optgroup>
+                                    <option value="Other">Other (Please Specify)</option>
+                                </select>
+                                
+                                {selectedAgency !== 'Not Affiliated' && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">National Ski Patrol ID #</label>
+                                        <input name="nspId" value={formData.nspId || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
+                                    </div>
+                                )}
                             </div>
-                            {formData.isAffiliated && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                     <div><label className="block text-sm font-medium text-gray-700">Primary Agency / Patrol</label><input name="primaryAgency" value={formData.primaryAgency || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
-                                     <div><label className="block text-sm font-medium text-gray-700">National Ski Patrol ID #</label><input name="nspId" value={formData.nspId || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
-                                </div>
-                            )}
+                            {isOtherAgency && (
+                                 <div className="mt-4">
+                                     <label className="block text-sm font-medium text-gray-700">Specify Other Agency Name</label>
+                                     <input name="primaryAgency" value={formData.primaryAgency || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
+                                 </div>
+                             )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
