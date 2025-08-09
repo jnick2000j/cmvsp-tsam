@@ -143,7 +143,7 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700">Ability / Role</label>
+                                    <label className="block text-sm font-medium text-gray-700">Patrol Ability / Role</label>
                                     <select name="ability" value={formData.ability || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
                                         <option value="">-- Select Ability --</option>
                                         <optgroup label="Leadership">
@@ -172,7 +172,8 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
                             )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div><label className="block text-sm font-medium text-gray-700">Training App Role</label>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Training Role</label>
                                 <select name="role" value={formData.role || 'Student'} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
                                     <option value="Student">Student</option>
                                     <optgroup label="Instructors">

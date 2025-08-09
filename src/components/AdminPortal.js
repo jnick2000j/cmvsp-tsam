@@ -10,7 +10,7 @@ import ClassEditModal from './ClassEditModal';
 import WaiverManagement from './WaiverManagement';
 import Branding from './Branding';
 import ShiftManagement from './ShiftManagement';
-import TimeClockManagement from './TimeClockManagement'; // Import new component
+import TimeClockManagement from './TimeClockManagement';
 import { Search, UserPlus, UploadCloud, Edit, Trash2, Check, PlusCircle, Layers, BookOpen, UserCog, FileSignature, Mail, Copy, Image as ImageIcon, Calendar, Smartphone } from 'lucide-react';
 import Icon from './Icon';
 
@@ -26,22 +26,19 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
     const [shifts, setShifts] = useState([]);
-    const [timeClocks, setTimeClocks] = useState([]); // State for time clocks
+    const [timeClocks, setTimeClocks] = useState([]);
 
     useEffect(() => {
-        // Listener for shifts
         const shiftsQuery = query(collection(db, `artifacts/${appId}/public/data/shifts`), orderBy("date", "desc"));
         const unsubscribeShifts = onSnapshot(shiftsQuery, (snapshot) => {
             setShifts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
 
-        // Listener for time clocks
         const timeClocksQuery = query(collection(db, `artifacts/${appId}/public/data/timeclocks`));
         const unsubscribeTimeClocks = onSnapshot(timeClocksQuery, (snapshot) => {
             setTimeClocks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
 
-        // Cleanup listeners
         return () => {
             unsubscribeShifts();
             unsubscribeTimeClocks();
@@ -49,8 +46,8 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
     }, []);
 
     const instructors = useMemo(() => allUsers.filter(u => INSTRUCTOR_ROLES.includes(u.role) || u.isAdmin), [allUsers]);
-
-    // ... (handleCopyClass, handleCopyStation, handleDeactivateUserClick, handlePasswordReset functions remain the same)
+    
+    // ... (rest of handler functions remain the same)
     const handleCopyClass = async (classToCopy) => {
         setMessage('');
         setError('');
@@ -196,8 +193,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             }
         });
     };
-
-    // New handlers for Time Clock devices
+    
     const handleSaveTimeClock = async (timeClockData) => {
         try {
             await addDoc(collection(db, `artifacts/${appId}/public/data/timeclocks`), timeClockData);
@@ -215,7 +211,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             console.error(err);
         }
     };
-
+    
     const filteredUsers = allUsers.filter(user => `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) || user.email.toLowerCase().includes(searchTerm.toLowerCase()) || (user.role && user.role.toLowerCase().includes(searchTerm.toLowerCase())) || (user.ability && user.ability.toLowerCase().includes(searchTerm.toLowerCase())));
 
     return (
@@ -250,8 +246,49 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         </div>
                         <div className="mt-6 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} /><input type="text" placeholder="Search users by name, email, or role..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-md" /></div>
                         <div className="mt-6 flow-root"><div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8"><div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8"><div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
-                            <table className="min-w-full divide-y divide-gray-300"><thead className="bg-gray-50"><tr><th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Name</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Contact</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Patrol Role</th><th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th></tr></thead>
-                            <tbody className="divide-y divide-gray-200 bg-white">{filteredUsers.map((user) => (<tr key={user.id}><td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-6"><div className="font-medium text-gray-900">{user.firstName} {user.lastName}</div><div className="text-gray-500">{user.email}</div></td><td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{user.phone}</td><td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500"><div className="flex items-center gap-2"><span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${user.isAdmin ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>{user.isAdmin ? 'Admin' : user.ability || user.role}</span>{INSTRUCTOR_ROLES.includes(user.role) && !user.isApproved && <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800">Training App Unapproved</span>}</div></td><td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6"><div className="flex items-center justify-end gap-2">{INSTRUCTOR_ROLES.includes(user.role) && !user.isApproved && <button onClick={() => handleApproveInstructor(user.id)} className="text-green-600 hover:text-green-900" title="Approve Instructor"><Check className="h-5 w-5"/></button>}<button onClick={() => handlePasswordReset(user.email, `${user.firstName} ${user.lastName}`)} className="text-blue-600 hover:text-blue-900" title="Send Password Reset"><Mail className="h-5 w-5" /></button><button onClick={() => handleEditUser(user)} className="text-indigo-600 hover:text-indigo-900" title="Edit User"><Edit className="h-5 w-5" /></button><button onClick={() => handleDeactivateUserClick(user.id, `${user.firstName} ${user.lastName}`)} className="text-red-600 hover:text-red-900 disabled:text-gray-300" disabled={user.id === currentUser.uid} title="Delete User Data"><Trash2 className="h-5 w-5" /></button></div></td></tr>))}</tbody></table>
+                            <table className="min-w-full divide-y divide-gray-300">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Name</th>
+                                        <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Training Role</th>
+                                        <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Patrol Ability</th>
+                                        <th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 bg-white">
+                                    {filteredUsers.map((user) => (
+                                        <tr key={user.id}>
+                                            <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-6">
+                                                <div className="font-medium text-gray-900">{user.firstName} {user.lastName}</div>
+                                                <div className="text-gray-500">{user.email}</div>
+                                            </td>
+                                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${user.isAdmin ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>
+                                                        {user.role || 'N/A'}
+                                                    </span>
+                                                    {INSTRUCTOR_ROLES.includes(user.role) && !user.isApproved && 
+                                                        <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800">Unapproved</span>
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                                                {user.ability || 'N/A'}
+                                            </td>
+                                            <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    {INSTRUCTOR_ROLES.includes(user.role) && !user.isApproved && 
+                                                        <button onClick={() => handleApproveInstructor(user.id)} className="text-green-600 hover:text-green-900" title="Approve Instructor"><Check className="h-5 w-5"/></button>
+                                                    }
+                                                    <button onClick={() => handlePasswordReset(user.email, `${user.firstName} ${user.lastName}`)} className="text-blue-600 hover:text-blue-900" title="Send Password Reset"><Mail className="h-5 w-5" /></button>
+                                                    <button onClick={() => handleEditUser(user)} className="text-indigo-600 hover:text-indigo-900" title="Edit User"><Edit className="h-5 w-5" /></button>
+                                                    <button onClick={() => handleDeactivateUserClick(user.id, `${user.firstName} ${user.lastName}`)} className="text-red-600 hover:text-red-900 disabled:text-gray-300" disabled={user.id === currentUser.uid} title="Delete User Data"><Trash2 className="h-5 w-5" /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div></div></div></div>
                     </>
                 )}
