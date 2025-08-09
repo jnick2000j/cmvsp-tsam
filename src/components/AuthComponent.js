@@ -1,19 +1,15 @@
 // src/components/AuthComponent.js
 import React, { useState } from 'react';
-import { auth, db, firebaseConfig } from '../firebaseConfig';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification, getAuth } from "firebase/auth";
-import { setDoc, doc } from 'firebase/firestore';
-import { INSTRUCTOR_ROLES } from '../constants';
+import { auth, firebaseConfig } from '../firebaseConfig'; // db is no longer needed here
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, getAuth } from "firebase/auth";
 import { initializeApp } from 'firebase/app';
 
-const AuthComponent = ({ logoUrl, loginTitle, loginError }) => { // Added loginError prop
+const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    const [firstName, setFirstName] = useState('');
-    const [lastName, setLastName] = useState('');
-    const [nspId, setNspId] = useState('');
+    // First name, last name, etc. are removed as the Cloud Function handles placeholders
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
     const [isPasswordReset, setIsPasswordReset] = useState(false);
@@ -41,6 +37,7 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => { // Added loginE
                 setError(err.message);
             }
         } else {
+            // Registration Logic
             if (password !== confirmPassword) {
                 setError("Passwords do not match.");
                 return;
@@ -50,36 +47,18 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => { // Added loginE
                 return;
             }
             try {
+                // We create a temporary app instance to avoid auto-logging in the new user
                 const tempAppName = `temp-user-creation-${Date.now()}`;
                 const tempApp = initializeApp(firebaseConfig, tempAppName);
                 const tempAuth = getAuth(tempApp);
 
-                const userCredential = await createUserWithEmailAndPassword(tempAuth, email, password);
+                await createUserWithEmailAndPassword(tempAuth, email, password);
                 
-                // Don't send verification email until admin approves
-                // await sendEmailVerification(userCredential.user);
-                setMessage("Registration successful! Your account is now pending administrator approval. You will be notified once it has been approved.");
-                
-                const newUser = {
-                    uid: userCredential.user.uid,
-                    firstName,
-                    lastName,
-                    email,
-                    nspId,
-                    role: 'Student',
-                    isAdmin: false,
-                    isAffiliated: false, 
-                    primaryAgency: '',
-                    assignments: {},
-                    enrolledClasses: [],
-                    completedClasses: {},
-                    isApproved: false, // Set isApproved to false
-                    needsApproval: true // Set needsApproval to true
-                };
-                await setDoc(doc(db, "users", userCredential.user.uid), newUser);
+                // The onUserCreate Cloud Function will now handle creating the Firestore document.
+                // We no longer need to call setDoc from the client.
 
-                // Switch back to the login view after successful registration
-                setIsLogin(true);
+                setMessage("Registration successful! Your account is now pending administrator approval. You will be notified once you can log in.");
+                setIsLogin(true); // Switch to login view
                 
             } catch (err) {
                 setError(err.message);
@@ -100,33 +79,16 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => { // Added loginE
                 {message && <p className="text-green-600 bg-green-50 p-3 rounded-lg text-sm text-center">{message}</p>}
 
                 <form onSubmit={handleAuthAction} className="space-y-4">
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email Address" required className="w-full px-4 py-3 border rounded-lg" />
+                    
                     {!isPasswordReset && (
-                        <>
-                            {!isLogin && (
-                                <div className="grid grid-cols-2 gap-4">
-                                    <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First Name" required className="w-full px-4 py-3 border rounded-lg" />
-                                    <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last Name" required className="w-full px-4 py-3 border rounded-lg" />
-                                </div>
-                            )}
-                            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email Address" required className="w-full px-4 py-3 border rounded-lg" />
-                             {!isLogin && (
-                                <input value={nspId} onChange={(e) => setNspId(e.target.value)} placeholder="National Ski Patrol ID #" className="w-full px-4 py-3 border rounded-lg" />
-                            )}
-                        </>
+                        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required className="w-full px-4 py-3 border rounded-lg" />
                     )}
 
-                    {!isPasswordReset ? (
-                         <>
-                            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" required className="w-full px-4 py-3 border rounded-lg" />
-                            {!isLogin && (
-                                <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm Password" required className="w-full px-4 py-3 border rounded-lg" />
-                            )}
-                        </>
-                    ) : (
-                         <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter your email" required className="w-full px-4 py-3 border rounded-lg" />
+                    {!isLogin && (
+                         <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm Password" required className="w-full px-4 py-3 border rounded-lg" />
                     )}
                    
-
                     <button type="submit" className="w-full py-3 text-white bg-primary hover:bg-primary-hover rounded-lg font-semibold">
                         {isPasswordReset ? 'Send Reset Email' : isLogin ? 'Login' : 'Register'}
                     </button>
