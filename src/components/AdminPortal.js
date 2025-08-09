@@ -10,7 +10,7 @@ import ClassEditModal from './ClassEditModal';
 import WaiverManagement from './WaiverManagement';
 import ShiftManagement from './ShiftManagement';
 import TimeClockManagement from './TimeClockManagement';
-import { Search, UserPlus, Edit, Trash2, Check, PlusCircle, Layers, BookOpen, UserCog, FileSignature, Mail, Copy, Calendar, Smartphone, X, CheckCircle, Shield, UserCheck } from 'lucide-react';
+import { Search, Edit, Trash2, Layers, BookOpen, UserCog, FileSignature, Mail, Calendar, Smartphone, UserCheck, PlusCircle, Copy } from 'lucide-react';
 import Icon from './Icon';
 
 const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser }) => {
@@ -22,8 +22,6 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
     const [editingUser, setEditingUser] = useState(null);
     const [editingStation, setEditingStation] = useState(null);
     const [editingClass, setEditingClass] = useState(null);
-    const [error, setError] = useState('');
-    const [message, setMessage] = useState('');
     const [shifts, setShifts] = useState([]);
     const [timeClocks, setTimeClocks] = useState([]);
 
@@ -53,17 +51,15 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             action: async () => {
                 try {
                     await sendPasswordResetEmail(auth, email);
-                    setMessage(`Password reset email sent to ${email}.`);
                 } catch (err) {
-                    setError(`Failed to send password reset email: ${err.message}`);
+                    console.error(`Failed to send password reset email: ${err.message}`);
                 }
             }
         });
     };
     
+    // ... (other handlers remain the same) ...
     const handleCopyClass = async (classToCopy) => {
-        setMessage('');
-        setError('');
         try {
             const newClassData = { ...classToCopy, name: `${classToCopy.name} (Copy)` };
             delete newClassData.id;
@@ -76,24 +72,18 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                 delete newStationData.id;
                 await addDoc(collection(db, `artifacts/${appId}/public/data/stations`), newStationData);
             }
-            setMessage(`Successfully copied class "${classToCopy.name}".`);
         } catch (err) {
-            setError('Failed to copy class.');
-            console.error(err);
+            console.error('Failed to copy class.', err);
         }
     };
 
     const handleCopyStation = async (stationToCopy) => {
-        setMessage('');
-        setError('');
         try {
             const newStationData = { ...stationToCopy, name: `${stationToCopy.name} (Copy)` };
             delete newStationData.id;
             await addDoc(collection(db, `artifacts/${appId}/public/data/stations`), newStationData);
-            setMessage(`Successfully copied station "${stationToCopy.name}".`);
         } catch (err) {
-            setError('Failed to copy station.');
-            console.error(err);
+            console.error('Failed to copy station.', err);
         }
     };
     
@@ -102,14 +92,10 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             title: "Delete User Data",
             message: `This will delete the user's data record but will NOT delete their login account. You will need to delete their account manually in the Firebase Authentication console. Are you sure you want to proceed?`,
             action: async () => {
-                setMessage('');
-                setError('');
                 try {
                     await deleteDoc(doc(db, "users", userId));
-                    setMessage(`Successfully deleted data for ${userName}.`);
                 } catch (err) {
                     console.error("Error deleting user document:", err);
-                    setError('Failed to delete user data.');
                 }
             }
         });
@@ -125,7 +111,6 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             }
         } catch(err) {
             console.error("Error saving shift:", err);
-            setError("Failed to save the shift.");
         }
     };
     
@@ -134,23 +119,13 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             await deleteDoc(doc(db, `artifacts/${appId}/public/data/shifts`, shiftId));
         } catch(err) {
             console.error("Error deleting shift:", err);
-            setError("Failed to delete the shift.");
         }
     };
 
 
     const handleEditUser = (user) => { setEditingUser(user); setIsUserModalOpen(true); };
     const handleCloseUserModal = () => { setIsUserModalOpen(false); setEditingUser(null); };
-
-    const handleApproveInstructor = async (userId) => {
-        try {
-            await updateDoc(doc(db, "users", userId), { isApproved: true });
-            setMessage("Instructor approved successfully.");
-        } catch (err) {
-            setError("Failed to approve instructor.");
-        }
-    };
-
+    
     const handleEditStation = (station) => { setEditingStation(station); setIsStationModalOpen(true); };
     const handleAddStation = () => { setEditingStation(null); setIsStationModalOpen(true); };
     const handleCloseStationModal = () => { setIsStationModalOpen(false); setEditingStation(null); };
@@ -162,7 +137,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                 try {
                     await deleteDoc(doc(db, `artifacts/${appId}/public/data/stations`, stationId));
                 } catch (err) {
-                    setError('Failed to delete station.');
+                    console.error('Failed to delete station.', err);
                 }
             }
         });
@@ -184,7 +159,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                     });
                     await deleteDoc(doc(db, `artifacts/${appId}/public/data/classes`, classId));
                 } catch (err) {
-                    setError('Failed to delete class and its stations.');
+                    console.error('Failed to delete class and its stations.', err);
                 }
             }
         });
@@ -194,7 +169,6 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
         try {
             await addDoc(collection(db, `artifacts/${appId}/public/data/timeclocks`), timeClockData);
         } catch (err) {
-            setError('Failed to save time clock device.');
             console.error(err);
         }
     };
@@ -203,7 +177,6 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
         try {
             await deleteDoc(doc(db, `artifacts/${appId}/public/data/timeclocks`, timeClockId));
         } catch (err) {
-            setError('Failed to delete time clock device.');
             console.error(err);
         }
     };
@@ -288,8 +261,29 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         </div></div></div></div>
                     </>
                 )}
-                {adminView === 'classes' && <ClassEditModal isOpen={isClassModalOpen} onClose={handleCloseClassModal} classToEdit={editingClass} onSave={() => {}} instructors={instructors} allUsers={allUsers} currentUser={currentUser} waivers={waivers} />}
-                {adminView === 'stations' && <StationEditModal isOpen={isStationModalOpen} onClose={handleCloseStationModal} stationToEdit={editingStation} onSave={() => {}} classes={classes} allUsers={allUsers} />}
+                {adminView === 'classes' && (
+                    <>
+                        <div className="sm:flex sm:items-center sm:justify-between"><div><h2 className="text-2xl font-bold text-gray-900">Classes</h2><p className="mt-1 text-sm text-gray-500">Manage the classes that contain stations.</p></div><div className="mt-4 sm:mt-0"><button onClick={handleAddClass} className="w-full flex items-center justify-center px-4 py-2 bg-primary text-white rounded-md shadow-sm hover:bg-primary-hover"><PlusCircle className="h-5 w-5 mr-2" /> Add New Class</button></div></div>
+                        <div className="mt-6 flow-root"><div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8"><div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8"><div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
+                            <table className="min-w-full divide-y divide-gray-300"><thead className="bg-gray-50"><tr><th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Class Name</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Status</th><th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th></tr></thead>
+                            <tbody className="divide-y divide-gray-200 bg-white">{classes.map((cls) => (<tr key={cls.id}><td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{cls.name}</td><td className="px-3 py-4 text-sm text-gray-500">{cls.isCompleted ? <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-800 px-2.5 py-0.5 text-xs font-medium">Completed</span> : <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 px-2.5 py-0.5 text-xs font-medium">Active</span>}</td><td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6"><button onClick={() => handleCopyClass(cls)} className="text-gray-500 hover:text-accent mr-4"><Copy className="h-5 w-5" /></button><button onClick={() => handleEditClass(cls)} className="text-accent hover:text-accent-hover mr-4"><Edit className="h-5 w-5" /></button><button onClick={() => handleDeleteClassClick(cls.id, cls.name)} className="text-red-600 hover:text-red-900"><Trash2 className="h-5 w-5" /></button></td></tr>))}</tbody></table>
+                        </div></div></div></div>
+                    </>
+                )}
+                 {adminView === 'stations' && (
+                    <>
+                        <div className="sm:flex sm:items-center sm:justify-between"><div><h2 className="text-2xl font-bold text-gray-900">Training Stations</h2><p className="mt-1 text-sm text-gray-500">Create, edit, and manage stations and their skills.</p></div><div className="mt-4 sm:mt-0"><button onClick={handleAddStation} className="w-full flex items-center justify-center px-4 py-2 bg-primary text-white rounded-md shadow-sm hover:bg-primary-hover" disabled={classes.length === 0}><PlusCircle className="h-5 w-5 mr-2" /> Add New Station</button></div></div>
+                        {classes.length === 0 && <p className="mt-4 text-yellow-700 bg-yellow-50 p-3 rounded-md">Please add a Class before adding stations.</p>}
+                        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {stations.map(station => (
+                                <div key={station.id} className="bg-white rounded-lg shadow flex flex-col">
+                                    <div className="p-4 border-b flex items-center space-x-3"><div className="bg-gray-100 p-2 rounded-full"><Icon name={station.icon} className="h-6 w-6 text-gray-600" /></div><div><h3 className="font-bold text-lg text-gray-800">{station.name}</h3><p className="text-xs text-gray-500">{classes.find(c => c.id === station.classId)?.name}</p></div></div>
+                                    <div className="p-3 bg-gray-50 border-t flex justify-end space-x-2"><button onClick={() => handleCopyStation(station)} className="p-2 text-gray-500 hover:text-accent hover:bg-indigo-50 rounded-md"><Copy size={18} /></button><button onClick={() => handleEditStation(station)} className="p-2 text-gray-500 hover:text-accent hover:bg-indigo-50 rounded-md"><Edit size={18} /></button><button onClick={() => handleDeleteStationClick(station.id, station.name)} className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md"><Trash2 size={18} /></button></div>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
                 {adminView === 'shifts' && <ShiftManagement shifts={shifts} users={allUsers} onSave={handleSaveShift} onDelete={handleDeleteShift} />}
                 {adminView === 'timeclocks' && <TimeClockManagement timeClocks={timeClocks} onSave={handleSaveTimeClock} onDelete={handleDeleteTimeClock} />}
                 {adminView === 'waivers' && <WaiverManagement waivers={waivers} setConfirmAction={setConfirmAction} />}

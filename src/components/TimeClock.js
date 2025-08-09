@@ -3,19 +3,26 @@ import React, { useState } from 'react';
 import { MOUNTAIN_AREAS, SHIFT_TYPES, PATROLS } from '../constants';
 import { LogIn, LogOut } from 'lucide-react';
 
-// PinPad component - now without its own submit button
+// PinPad component
 const PinPad = ({ onPinChange, pin, pinLength = 10 }) => {
+    const [localPin, setLocalPin] = useState(pin);
+
     const handleButtonClick = (num) => {
-        if (pin.length < pinLength) {
-            onPinChange(pin + num);
+        if (localPin.length < pinLength) {
+            const newPin = localPin + num;
+            setLocalPin(newPin);
+            onPinChange(newPin);
         }
     };
 
     const handleBackspace = () => {
-        onPinChange(pin.slice(0, -1));
+        const newPin = localPin.slice(0, -1);
+        setLocalPin(newPin);
+        onPinChange(newPin);
     };
     
     const handleClear = () => {
+        setLocalPin('');
         onPinChange('');
     };
 
@@ -61,14 +68,14 @@ const TimeClock = ({ users, onClockIn, onClockOut, branding, timeClocks }) => {
     const [message, setMessage] = useState('');
 
     const handleDeviceLogin = (e) => {
-        e.preventDefault(); // Prevent form submission
+        e.preventDefault();
         setDeviceLoginError('');
-        const validDevice = timeClocks.find(device => device.pin === devicePinInput);
+        const validDevice = timeClocks.find(device => device.pin === devicePinInput && device.type === 'Time Clock');
         if (validDevice) {
             setLoggedInDeviceName(validDevice.name);
             setIsDeviceLoggedIn(true);
         } else {
-            setDeviceLoginError('Invalid device PIN. Please try again.');
+            setDeviceLoginError('Invalid Time Clock PIN. Please try again.');
         }
         setDevicePinInput('');
     };
@@ -86,7 +93,7 @@ const TimeClock = ({ users, onClockIn, onClockOut, branding, timeClocks }) => {
                 setMessage("Please enter guest name and agency.");
                 return;
             }
-            onClockIn({ isGuest: true, name: guestName, agency: guestAgency, area, shiftType, patrol });
+            onClockIn({ isGuest: true, name: guestName, agency: guestAgency, area, shiftType: 'N/A', patrol: 'N/A' });
             setGuestName('');
             setGuestAgency('');
         } else {
@@ -126,7 +133,7 @@ const TimeClock = ({ users, onClockIn, onClockOut, branding, timeClocks }) => {
                     <div className="flex justify-center mb-4">
                         {branding && branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="h-20 w-auto" />}
                     </div>
-                    <h1 className="text-2xl font-bold text-center text-gray-800">Device Login</h1>
+                    <h1 className="text-2xl font-bold text-center text-gray-800">Time Clock Login</h1>
                     {deviceLoginError && <p className="text-center text-red-500 bg-red-50 p-3 rounded-lg">{deviceLoginError}</p>}
                     
                     <input
@@ -166,7 +173,6 @@ const TimeClock = ({ users, onClockIn, onClockOut, branding, timeClocks }) => {
                 {message && <p className="text-center text-green-500 mb-4">{message}</p>}
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* Left Column: User Info & Actions */}
                     <div className="space-y-4">
                         <div className="flex items-center">
                             <input type="checkbox" id="guest" checked={isGuest} onChange={() => setIsGuest(!isGuest)} className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"/>
@@ -185,16 +191,19 @@ const TimeClock = ({ users, onClockIn, onClockOut, branding, timeClocks }) => {
                             </select>
                         )}
                         
-                        <select value={patrol} onChange={(e) => setPatrol(e.target.value)} className="w-full px-4 py-3 border rounded-lg">
-                            {PATROLS.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
+                        {!isGuest && (
+                            <>
+                                <select value={patrol} onChange={(e) => setPatrol(e.target.value)} className="w-full px-4 py-3 border rounded-lg">
+                                    {PATROLS.map(p => <option key={p} value={p}>{p}</option>)}
+                                </select>
+                                <select value={shiftType} onChange={(e) => setShiftType(e.target.value)} className="w-full px-4 py-3 border rounded-lg">
+                                    {SHIFT_TYPES.map(st => <option key={st} value={st}>{st}</option>)}
+                                </select>
+                            </>
+                        )}
                         
                         <select value={area} onChange={(e) => setArea(e.target.value)} className="w-full px-4 py-3 border rounded-lg">
                             {MOUNTAIN_AREAS.map(a => <option key={a} value={a}>{a}</option>)}
-                        </select>
-
-                        <select value={shiftType} onChange={(e) => setShiftType(e.target.value)} className="w-full px-4 py-3 border rounded-lg">
-                            {SHIFT_TYPES.map(st => <option key={st} value={st}>{st}</option>)}
                         </select>
 
                         <div className="flex space-x-4 pt-4 border-t">
@@ -203,7 +212,6 @@ const TimeClock = ({ users, onClockIn, onClockOut, branding, timeClocks }) => {
                         </div>
                     </div>
 
-                    {/* Right Column: Pin Pad */}
                     {!isGuest && (
                         <div className="flex flex-col items-center">
                              <input

@@ -1,37 +1,31 @@
 // src/App.js
 import React, { useState, useEffect, useMemo } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, query, updateDoc, addDoc, getDocs, deleteDoc, where, arrayUnion, arrayRemove, deleteField, orderBy, limit } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, updateDoc, addDoc, getDocs, where, serverTimestamp, arrayRemove } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
 import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROL_LEADER_ROLES, appId } from './constants';
 
 // Import All Components
 import AuthComponent from './components/AuthComponent';
 import AdminPortal from './components/AdminPortal';
-import MyStations from './components/MyStations';
 import AttendanceTabs from './components/AttendanceTabs';
-import HelpTabs from './components/HelpTabs';
 import CourseCatalog from './components/CourseCatalog';
-import TrainingHistory from './components/TrainingHistory';
 import ProfileManagement from './components/ProfileManagement';
-import SkillsModal from './components/skillsModal';
-import WaiverSigningModal from './components/WaiverSigningModal';
 import CertificateModal from './components/CertificateModal';
 import ConfirmationModal from './components/ConfirmationModal';
-import PrerequisiteUploadModal from './components/PrerequisiteUploadModal';
 import Dashboard from './components/Dashboard';
 import Scheduling from './components/Scheduling';
 import TimeClock from './components/TimeClock';
 import MyTraining from './components/MyTraining';
 import Branding from './components/Branding';
+import ClassClock from './components/ClassClock';
 
 import { generateClassPdf } from './utils/pdfGenerator';
-import { LayoutDashboard, ClipboardList, Handshake, Library, Clock, User, Shield, Calendar, BarChart, Smartphone } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, Library, Shield, Calendar } from 'lucide-react';
 
 export default function App() {
     const [user, setUser] = useState(null);
     const [isAuthLoading, setIsAuthLoading] = useState(true);
-    const [isDataLoading, setIsDataLoading] = useState(true);
     const [branding, setBranding] = useState({ 
         siteLogo: null, 
         logos: [], 
@@ -47,38 +41,25 @@ export default function App() {
     const [classes, setClasses] = useState([]);
     const [waivers, setWaivers] = useState([]);
     const [allUsers, setAllUsers] = useState([]);
-    const [updates, setUpdates] = useState([]);
-    const [instructorSignups, setInstructorSignups] = useState([]);
-    const [supportSignups, setSupportSignups] = useState([]);
     const [dailyCheckIns, setDailyCheckIns] = useState([]);
     const [checkIns, setCheckIns] = useState([]);
     const [attendanceRecords, setAttendanceRecords] = useState([]);
-    const [roleRequests, setRoleRequests] = useState([]);
     const [shifts, setShifts] = useState([]);
     const [timeClockEntries, setTimeClockEntries] = useState([]);
     const [timeClocks, setTimeClocks] = useState([]);
     const [loginMessage, setLoginMessage] = useState('');
-    const [error, setError] = useState('');
     const [view, setView] = useState('dashboard');
     const [subView, setSubView] = useState('');
     const [activeClassId, setActiveClassId] = useState(null);
-    const [pendingActionsPage, setPendingActionsPage] = useState(0);
-    const [isSkillsModalOpen, setIsSkillsModalOpen] = useState(false);
-    const [selectedCheckInForSkills, setSelectedCheckInForSkills] = useState(null);
     const [isCertificateModalOpen, setIsCertificateModalOpen] = useState(false);
-    const [certificateData, setCertificateData] = useState(null);
-    const [isWaiverModalOpen, setIsWaiverModalOpen] = useState(false);
-    const [waiversToSign, setWaiversToSign] = useState([]);
-    const [enrollmentClass, setEnrollmentClass] = useState(null);
     const [confirmAction, setConfirmAction] = useState(null);
     const [enrollmentError, setEnrollmentError] = useState(null);
-    const [isPrerequisiteModalOpen, setIsPrerequisiteModalOpen] = useState(false);
-    const [classForUpload, setClassForUpload] = useState(null);
-    const [isUploading, setIsUploading] = useState(false);
 
     const isTimeClockView = window.location.pathname === '/timeclock';
+    const isClassClockView = window.location.pathname === '/classclock';
 
     useEffect(() => {
+        // ... (useEffect for branding and auth remains the same)
         const brandingRef = doc(db, `artifacts/${appId}/public/data/branding`, 'settings');
         const unsubBranding = onSnapshot(brandingRef, (doc) => {
             if (doc.exists()) {
@@ -119,8 +100,8 @@ export default function App() {
     }, []);
 
     useEffect(() => {
-        if (isAuthLoading || (!user && !isTimeClockView)) {
-            setIsDataLoading(false);
+        // ... (useEffect for data fetching remains the same)
+        if (isAuthLoading || (!user && !isTimeClockView && !isClassClockView)) {
             return;
         }
 
@@ -131,10 +112,7 @@ export default function App() {
             users: setAllUsers,
             checkins: setCheckIns,
             dailyCheckIns: setDailyCheckIns,
-            instructorSignups: setInstructorSignups,
-            supportSignups: setSupportSignups,
             attendanceRecords: setAttendanceRecords,
-            roleRequests: setRoleRequests,
             shifts: setShifts,
             timeClockEntries: setTimeClockEntries,
             timeclocks: setTimeClocks
@@ -147,10 +125,8 @@ export default function App() {
             }, (err) => console.error(`Failed to load ${name}:`, err));
         });
         
-        setIsDataLoading(false);
-
         return () => unsubscribers.forEach(unsub => unsub());
-    }, [user, isAuthLoading, isTimeClockView]);
+    }, [user, isAuthLoading, isTimeClockView, isClassClockView]);
 
     const myAssignments = useMemo(() => {
         if (!user) return [];
@@ -185,7 +161,21 @@ export default function App() {
         setConfirmAction(null);
     };
 
+    const handleCancelEnrollment = (classId) => {
+        setConfirmAction({
+            title: "Cancel Enrollment",
+            message: "Are you sure you want to cancel your enrollment in this course? This action cannot be undone.",
+            action: async () => {
+                const userRef = doc(db, "users", user.uid);
+                await updateDoc(userRef, {
+                    enrolledClasses: arrayRemove(classId)
+                });
+            }
+        });
+    };
+
     const handleClockInOut = async (data) => {
+        // ... (logic remains the same)
         const { isGuest, userId, pin, name, agency, area, shiftType } = data;
         
         if (!isGuest) {
@@ -221,14 +211,39 @@ export default function App() {
         }
     };
 
+    const handleClassCheckIn = async (student, course, station) => {
+        const todayISO = new Date().toISOString().split('T')[0];
+        const checkInData = {
+            studentId: student.uid,
+            classId: course.id,
+            stationId: station.id,
+            checkInDate: todayISO,
+            checkInTime: serverTimestamp(),
+            status: 'pending',
+        };
+        await addDoc(collection(db, `artifacts/${appId}/public/data/dailyCheckIns`), checkInData);
+    };
 
-    if (isAuthLoading || ((user && !user.firstName) && !isTimeClockView)) {
+    const handleClassCheckOut = async (checkInId) => {
+        const checkInRef = doc(db, `artifacts/${appId}/public/data/dailyCheckIns`, checkInId);
+        await updateDoc(checkInRef, {
+            checkOutTime: serverTimestamp()
+        });
+    };
+
+
+    if (isAuthLoading || ((user && !user.firstName) && !isTimeClockView && !isClassClockView)) {
         return <div className="flex items-center justify-center h-screen bg-gray-100"><div className="text-xl font-semibold text-gray-600">Loading Application...</div></div>;
     }
 
     if (isTimeClockView) {
         return <TimeClock users={allUsers} onClockIn={handleClockInOut} onClockOut={handleClockInOut} branding={branding} timeClocks={timeClocks} />;
     }
+    
+    if (isClassClockView) {
+        return <ClassClock users={allUsers} classes={classes} stations={stations} dailyCheckIns={dailyCheckIns} handleClassCheckIn={handleClassCheckIn} handleClassCheckOut={handleClassCheckOut} branding={branding} />;
+    }
+
 
     if (!user) {
         return <AuthComponent logoUrl={branding.siteLogo} loginTitle={branding.loginTitle} authMessage={loginMessage} setAuthMessage={setLoginMessage} />;
@@ -240,15 +255,17 @@ export default function App() {
     const hasSchedulingAccess = user.isAdmin || user.allowScheduling; 
 
     const renderContent = () => {
+        const enrolledClassesDetails = classes.filter(c => user.enrolledClasses?.includes(c.id));
         switch (view) {
             case 'admin': return <AdminPortal {...{ currentUser: user, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser: handleApproveUser }} />;
             case 'siteBranding': return <div className="p-4 sm:p-6 lg:p-8"><Branding branding={branding} onUpdate={setBranding} /></div>;
             case 'myTraining': 
                 return <MyTraining {...{ 
                     user, 
-                    enrolledClassesDetails: classes.filter(c => user.enrolledClasses?.includes(c.id)),
+                    enrolledClassesDetails,
                     dailyCheckIns,
                     setActiveClassId,
+                    handleCancelEnrollment,
                     allUsers, 
                     classes, 
                     stations, 
@@ -256,7 +273,6 @@ export default function App() {
                     generateClassPdf 
                 }} />;
             case 'attendance': return <AttendanceTabs {...{ user, allUsers, classes, stations, attendanceRecords, subView, setSubView }} />;
-            case 'help': return <HelpTabs {...{ user, stations, classes, addUpdate: () => {}, instructorSignups, supportSignups, subView, setSubView }} />;
             case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: () => {}, enrollmentError, branding }} />;
             case 'profile': return <ProfileManagement {...{ user, setConfirmAction }} />;
             case 'scheduling': 
@@ -267,15 +283,15 @@ export default function App() {
                     user, 
                     isInstructor,
                     isStudent: !isInstructor && !isSupport,
-                    enrolledClassesDetails: classes.filter(c => user.enrolledClasses?.includes(c.id)), 
-                    dailyCheckIns, 
+                    enrolledClassesDetails, 
                     setActiveClassId, 
+                    handleCancelEnrollment,
                     myAssignments, 
                     attendanceRecords, 
                     classes, 
                     paginatedPendingActions: [], 
-                    setPendingActionsPage, 
-                    pendingActionsPage, 
+                    setPendingActionsPage: () => {}, 
+                    pendingActionsPage: 0, 
                     allPendingActions: [],
                     timeClockEntries,
                     allUsers,
@@ -317,7 +333,7 @@ export default function App() {
             <main className="max-w-7xl mx-auto">
                 {renderContent()}
             </main>
-            <CertificateModal isOpen={isCertificateModalOpen} onClose={() => setIsCertificateModalOpen(false)} certificateData={certificateData} />
+            <CertificateModal isOpen={isCertificateModalOpen} onClose={() => setIsCertificateModalOpen(false)} certificateData={null} />
             <ConfirmationModal
                 isOpen={!!confirmAction}
                 onClose={() => setConfirmAction(null)}
