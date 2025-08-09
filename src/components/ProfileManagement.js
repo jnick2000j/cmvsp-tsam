@@ -1,8 +1,9 @@
 // src/components/ProfileManagement.js
 import React, { useState, useEffect } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
-import { User, Shield, Briefcase, Mail, Phone, Home } from 'lucide-react';
+import { db, auth } from '../firebaseConfig';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { User, Shield, Briefcase, Mail, Phone, Home, Key } from 'lucide-react';
 
 const ProfileManagement = ({ user }) => {
     const [formData, setFormData] = useState({});
@@ -19,7 +20,7 @@ const ProfileManagement = ({ user }) => {
                 city: user.city || '',
                 state: user.state || '',
                 zip: user.zip || '',
-                timeClockPin: '', // Keep this separate and blank for security
+                timeClockPin: '',
             });
         }
     }, [user]);
@@ -27,6 +28,18 @@ const ProfileManagement = ({ user }) => {
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData({ ...formData, [name]: value });
+    };
+
+    const handlePasswordReset = async () => {
+        setMessage('');
+        setError('');
+        try {
+            await sendPasswordResetEmail(auth, user.email);
+            setMessage('A password reset link has been sent to your email address.');
+        } catch (err) {
+            setError('Failed to send password reset email. Please try again.');
+            console.error(err);
+        }
     };
 
     const handleSubmit = async (e) => {
@@ -51,14 +64,12 @@ const ProfileManagement = ({ user }) => {
                 zip: formData.zip,
             };
 
-            // Only include the PIN in the update if the user entered a new one
             if (formData.timeClockPin) {
                 dataToUpdate.timeClockPin = formData.timeClockPin;
             }
 
             await updateDoc(userRef, dataToUpdate);
             setMessage('Your profile has been updated successfully.');
-            // Clear the PIN field after successful submission
             setFormData(prev => ({ ...prev, timeClockPin: '' }));
         } catch (err) {
             setError('Failed to update profile. Please try again.');
@@ -136,6 +147,11 @@ const ProfileManagement = ({ user }) => {
                                 <label className="block text-sm font-medium text-gray-700">New Time Clock PIN</label>
                                 <input name="timeClockPin" type="password" value={formData.timeClockPin} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" placeholder="Enter a new 4+ digit PIN"/>
                                 <p className="mt-1 text-xs text-gray-500">Leave this field blank to keep your current PIN.</p>
+                            </div>
+                            <div className="mt-4">
+                                <button type="button" onClick={handlePasswordReset} className="flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                                    <Key className="h-4 w-4 mr-2" /> Send Password Reset Email
+                                </button>
                             </div>
                         </div>
 

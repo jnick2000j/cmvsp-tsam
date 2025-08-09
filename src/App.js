@@ -258,7 +258,7 @@ export default function App() {
             case 'attendance': return <AttendanceTabs {...{ user, allUsers, classes, stations, attendanceRecords, subView, setSubView }} />;
             case 'help': return <HelpTabs {...{ user, stations, classes, addUpdate: () => {}, instructorSignups, supportSignups, subView, setSubView }} />;
             case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: () => {}, enrollmentError, branding }} />;
-            case 'profile': return <ProfileManagement {...{ user }} />;
+            case 'profile': return <ProfileManagement {...{ user, setConfirmAction }} />;
             case 'scheduling': 
                 return hasSchedulingAccess ? <Scheduling user={user} allUsers={allUsers} shifts={shifts} timeClockEntries={timeClockEntries} /> : <div>Access Denied</div>;
             case 'dashboard':
@@ -309,6 +309,7 @@ export default function App() {
                         {hasSchedulingAccess && <button onClick={() => handleNavClick('scheduling')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'scheduling' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Calendar className="mr-1.5 h-4 w-4" />My Schedule</button>}
                         <button onClick={() => handleNavClick('myTraining')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'myTraining' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Library className="mr-1.5 h-4 w-4" />My Training</button>
                         {isInstructor && (<button onClick={() => handleNavClick('attendance', 'checkInOut')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'attendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ClipboardList className="mr-1.5 h-4 w-4" />Attendance Management</button>)}
+                        <button onClick={() => handleNavClick('catalog')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'catalog' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Library className="mr-1.5 h-4 w-4" />Course Catalog</button>
                         {user.isAdmin && <button onClick={() => handleNavClick('admin')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'admin' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Shield className="mr-1.5 h-4 w-4" />Admin Portal</button>}
                     </nav>
                 </div>
