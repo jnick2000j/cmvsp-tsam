@@ -11,13 +11,12 @@ import {
 } from "firebase/auth";
 import { doc, setDoc } from 'firebase/firestore';
 
-const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
+const AuthComponent = ({ logoUrl, loginTitle, authMessage, setAuthMessage }) => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
-    const [message, setMessage] = useState('');
     const [isPasswordReset, setIsPasswordReset] = useState(false);
     
     // State for all registration fields
@@ -28,28 +27,28 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
     const [city, setCity] = useState('');
     const [state, setState] = useState('');
     const [zip, setZip] = useState('');
-    const [isCmspAffiliated, setIsCmspAffiliated] = useState(false); // New state for Crystal Mountain
-    const [isOtherAffiliated, setIsOtherAffiliated] = useState(false); // State for other NSP agencies
+    const [isCmspAffiliated, setIsCmspAffiliated] = useState(false);
+    const [isOtherAffiliated, setIsOtherAffiliated] = useState(false);
     const [primaryAgency, setPrimaryAgency] = useState('');
     const [nspId, setNspId] = useState('');
+    
+    const clearFormState = () => {
+        setError('');
+        setAuthMessage('');
+    }
 
     const handleCmspAffiliationChange = (checked) => {
         setIsCmspAffiliated(checked);
-        // If user is affiliated with Crystal Mountain, they can't be affiliated with another agency
-        if (checked) {
-            setIsOtherAffiliated(false);
-        }
+        if (checked) setIsOtherAffiliated(false);
     };
 
     const handleOtherAffiliationChange = (checked) => {
         setIsOtherAffiliated(checked);
-        // If user is affiliated with another agency, they can't be with Crystal Mountain
-        if (checked) {
-            setIsCmspAffiliated(false);
-        }
+        if (checked) setIsCmspAffiliated(false);
     };
 
     const handleEntraIdLogin = async () => {
+        clearFormState();
         const provider = new OAuthProvider('microsoft.com');
         try {
             await signInWithPopup(auth, provider);
@@ -60,11 +59,17 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
     
     const handleAuthAction = async (e) => {
         e.preventDefault();
-        setError('');
-        setMessage('');
+        clearFormState();
 
         if (isPasswordReset) {
-            // ... (password reset logic remains the same)
+            try {
+                await sendPasswordResetEmail(auth, email);
+                setAuthMessage('Password reset email sent! Please check your inbox.');
+                setIsPasswordReset(false);
+            } catch (err) {
+                setError(err.message);
+            }
+            return;
         }
 
         if (isLogin) {
@@ -96,7 +101,7 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
                     state,
                     zip,
                     nspId: isOtherAffiliated ? nspId : '',
-                    isAffiliated: isCmspAffiliated, // Use the new state for this field
+                    isAffiliated: isCmspAffiliated,
                     primaryAgency: isOtherAffiliated ? primaryAgency : (isCmspAffiliated ? 'Crystal Mountain Ski Patrol' : ''),
                     role: 'Student',
                     isAdmin: false,
@@ -112,14 +117,12 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
                 
                 await signOut(auth);
 
-                setMessage("Registration successful! Your account is now pending administrator approval. You will be notified once you can log in.");
+                setAuthMessage("Your account request has been submitted and is pending approval.");
                 setIsLogin(true);
                 
             } catch (err) {
                 setError(err.code === 'auth/email-already-in-use' ? 'This email is already registered. Please log in or use a different email.' : err.message);
-                if (auth.currentUser) {
-                    await signOut(auth);
-                }
+                if (auth.currentUser) await signOut(auth);
             }
         }
     };
@@ -133,8 +136,7 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
                 </div>
 
                 {error && <p className="text-red-500 bg-red-50 p-3 rounded-lg text-sm text-center">{error}</p>}
-                {loginError && <p className="text-red-500 bg-red-50 p-3 rounded-lg text-sm text-center">{loginError}</p>}
-                {message && <p className="text-green-600 bg-green-50 p-3 rounded-lg text-sm text-center">{message}</p>}
+                {authMessage && <p className="text-green-600 bg-green-50 p-3 rounded-lg text-sm text-center">{authMessage}</p>}
 
                 {isLogin && (
                     <div className="space-y-4">
@@ -202,11 +204,6 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
                                         <input value={nspId} onChange={(e) => setNspId(e.target.value)} placeholder="NSP Identification Number" required={isOtherAffiliated} className="w-full px-4 py-3 border rounded-lg" />
                                     </div>
                                 )}
-                                 {!isCmspAffiliated && !isOtherAffiliated && (
-                                    <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm text-gray-600">
-                                        You have selected "Not Affiliated with a Patrol or Agency".
-                                    </div>
-                                )}
                             </div>
                          </>
                     )}
@@ -219,12 +216,12 @@ const AuthComponent = ({ logoUrl, loginTitle, loginError }) => {
                 <div className="text-center text-sm">
                     {isLogin ? (
                         <>
-                            <button onClick={() => { setIsLogin(false); setError(''); setMessage(''); }} className="font-medium text-accent hover:text-accent-hover">Request Access to Crystal Mountain TSAM</button>
+                            <button onClick={() => { setIsLogin(false); clearFormState(); }} className="font-medium text-accent hover:text-accent-hover">Request Access to Crystal Mountain TSAM</button>
                             <br/>
-                            <button onClick={() => { setIsPasswordReset(true); setError(''); setMessage(''); }} className="font-medium text-accent hover:text-accent-hover mt-2">Forgot Password?</button>
+                            <button onClick={() => { setIsPasswordReset(true); clearFormState(); }} className="font-medium text-accent hover:text-accent-hover mt-2">Forgot Password?</button>
                         </>
                     ) : (
-                        <button onClick={() => { setIsLogin(true); setError(''); setMessage(''); }} className="font-medium text-accent hover:text-accent-hover">Already have an account? Login</button>
+                        <button onClick={() => { setIsLogin(true); clearFormState(); }} className="font-medium text-accent hover:text-accent-hover">Already have an account? Login</button>
                     )}
                      {isPasswordReset && (
                         <button onClick={() => setIsPasswordReset(false)} className="font-medium text-accent hover:text-accent-hover mt-2">Back to Login</button>

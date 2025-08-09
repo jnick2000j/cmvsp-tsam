@@ -59,7 +59,7 @@ export default function App() {
     const [timeClockEntries, setTimeClockEntries] = useState([]);
     const [timeClocks, setTimeClocks] = useState([]);
 
-    const [loginError, setLoginError] = useState('');
+    const [loginMessage, setLoginMessage] = useState(''); // Handles all login screen messages
 
 
     const [error, setError] = useState('');
@@ -98,17 +98,22 @@ export default function App() {
         });
 
         const unsubAuth = onAuthStateChanged(auth, (authUser) => {
-            setLoginError('');
+            setLoginMessage('');
             if (authUser) {
                 const unsubUser = onSnapshot(doc(db, "users", authUser.uid), (userDoc) => {
-                    if (userDoc.exists()) {
-                        const userData = userDoc.data();
-                        if (userData.isApproved) {
-                            setUser({ uid: authUser.uid, id: userDoc.id, ...userData });
-                        } else {
-                            signOut(auth);
-                            setLoginError("Your account is pending administrator approval. Please wait for an email notification before logging in.");
-                        }
+                    // CRITICAL FIX: If the document doesn't exist, it's likely being created.
+                    // We must wait for the listener to fire again when the doc is ready.
+                    if (!userDoc.exists()) {
+                        // This prevents signing out a user during the registration race condition.
+                        return; 
+                    }
+
+                    const userData = userDoc.data();
+                    if (userData.isApproved) {
+                        setUser({ uid: authUser.uid, id: userDoc.id, ...userData });
+                    } else {
+                        signOut(auth);
+                        setLoginMessage("Your account is pending administrator approval. Please wait for an email notification before logging in.");
                     }
                     setIsAuthLoading(false);
                 });
@@ -231,7 +236,7 @@ export default function App() {
     }
 
     if (!user) {
-        return <AuthComponent logoUrl={branding.siteLogo} loginTitle={branding.loginTitle} loginError={loginError} />;
+        return <AuthComponent logoUrl={branding.siteLogo} loginTitle={branding.loginTitle} authMessage={loginMessage} setAuthMessage={setLoginMessage} />;
     }
     
     const isInstructor = user.isAdmin || INSTRUCTOR_ROLES.includes(user.role);
