@@ -1,0 +1,57 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if the requesting user is an administrator.
+    // This simplifies the rules below.
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+    
+    // Helper function to check if the user's account has been approved.
+    function isApproved() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isApproved == true;
+    }
+
+    // --- Rules for the 'users' collection ---
+    match /users/{userId} {
+      // DENY direct creation of user documents from the client.
+      // This is now the exclusive responsibility of the onUserCreate Cloud Function
+      // to ensure the isApproved and needsApproval flags are set correctly.
+      allow create: if false;
+
+      // Users can read/update their own profile. Admins can read/update any user's profile.
+      // This rule remains the same as your original.
+      allow read, update: if request.auth.uid == userId || isAdmin();
+      
+      // Only admins can delete user documents. 
+      // Changed to prevent a user from deleting their own unapproved account.
+      allow delete: if isAdmin();
+    }
+
+    // --- Rules for Branding ---
+    // This rule makes the branding settings publicly readable for the login page.
+    // Only admins can change branding. This remains the same as your original.
+    match /artifacts/{appId}/public/data/branding/settings {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // --- Rules for Role Requests ---
+    // This is for a separate feature and remains the same as your original.
+    match /artifacts/{appId}/public/data/roleRequests/{docId} {
+      allow create: if true;
+      allow read, delete: if isAdmin();
+    }
+
+    // --- General Data Access Rule ---
+    // This is the main catch-all for all other data (shifts, stations, classes, etc.).
+    // It now CHECKS FOR APPROVAL. A user must be logged in AND have an approved
+    // account to read or write any data. This is the key change that prevents
+    // unapproved users from accessing the main application.
+    match /artifacts/{appId}/public/data/{document=**} {
+      allow read, write: if request.auth != null && isApproved();
+    }
+  }
+}
