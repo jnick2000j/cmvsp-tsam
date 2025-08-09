@@ -1,90 +1,132 @@
 // src/components/CheckInOutPortal.js
-import React from 'react';
-import { doc, updateDoc, addDoc, collection } from 'firebase/firestore';
+import React, { useState, useMemo } from 'react';
+import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { appId, INSTRUCTOR_ROLES, SUPPORT_ROLES } from '../constants';
-import { UserRoundCheck, UserRoundMinus } from 'lucide-react';
+import { LogIn, LogOut } from 'lucide-react';
 
-const CheckInOutPortal = ({ user, classes, allUsers, attendanceRecords }) => {
+const CheckInOutPortal = ({ user, classes, allUsers, attendanceRecords, stations }) => {
+    const [selectedClassId, setSelectedClassId] = useState('');
+    const todayISO = new Date().toISOString().split('T')[0];
 
-    const handleCheckInOut = async (personId, classId, personRole, personName) => {
-        if (!user || !db) return;
+    const handleManualCheckIn = async (attendee, classId) => {
+        const checkInData = {
+            userId: attendee.id,
+            userRole: attendee.role,
+            classId: classId,
+            stationId: 'class_check_in', // Generic ID for main class check-in
+            checkInDate: todayISO,
+            checkInTime: serverTimestamp(),
+            status: 'approved', // Manual check-ins are auto-approved
+            checkedInBy: user.uid,
+        };
+        await addDoc(collection(db, `artifacts/${appId}/public/data/attendanceRecords`), checkInData);
+    };
 
-        const activeRecord = attendanceRecords.find(r => r.userId === personId && r.classId === classId && !r.checkOutTime);
+    const handleManualCheckOut = async (recordId) => {
+        const recordRef = doc(db, `artifacts/${appId}/public/data/attendanceRecords`, recordId);
+        await updateDoc(recordRef, {
+            checkOutTime: serverTimestamp(),
+            checkedOutBy: user.uid,
+        });
+    };
 
-        try {
-            if (activeRecord) {
-                const recordRef = doc(db, `artifacts/${appId}/public/data/attendanceRecords`, activeRecord.id);
-                await updateDoc(recordRef, {
-                    checkOutTime: new Date(),
-                    checkOutBy: user.uid,
-                    checkOutByName: `${user.firstName} ${user.lastName}`
-                });
-            } else {
-                await addDoc(collection(db, `artifacts/${appId}/public/data/attendanceRecords`), {
-                    userId: personId,
-                    userName: personName,
-                    userRole: personRole,
-                    classId: classId,
-                    checkInTime: new Date(),
-                    checkOutTime: null,
-                    checkInBy: user.uid,
-                    checkInByName: `${user.firstName} ${user.lastName}`
-                });
-            }
-        } catch (error) {
-            console.error("Error checking in/out:", error);
-        }
+    const classRoster = useMemo(() => {
+        if (!selectedClassId) return null;
+        const selectedClass = classes.find(c => c.id === selectedClassId);
+        if (!selectedClass) return null;
+
+        const leadInstructor = allUsers.find(u => u.id === selectedClass.leadInstructorId);
+        const instructors = allUsers.filter(u => selectedClass.instructors?.includes(u.id));
+        const support = allUsers.filter(u => selectedClass.supportNeeds?.some(s => s.assignedUserId === u.id));
+        const students = allUsers.filter(u => u.enrolledClasses?.includes(selectedClass.id));
+
+        return { leadInstructor, instructors, support, students };
+    }, [selectedClassId, classes, allUsers]);
+
+    const getAttendanceStatus = (userId) => {
+        const record = attendanceRecords.find(r => r.userId === userId && r.classId === selectedClassId && r.checkInDate === todayISO && !r.checkOutTime);
+        return record;
     };
 
     return (
-        <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-6">Class Check-in & Check-out</h1>
-            {classes.length > 0 ? (
-                <div className="space-y-8">
-                    {classes.map(cls => {
-                        const members = allUsers.filter(u => u.enrolledClasses?.includes(cls.id) || INSTRUCTOR_ROLES.includes(u.role) || SUPPORT_ROLES.includes(u.role));
+        <div className="bg-white p-6 rounded-xl shadow-lg">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">Class Check In/Out</h2>
+            <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700">Select a Class to Manage</label>
+                <select
+                    value={selectedClassId}
+                    onChange={(e) => setSelectedClassId(e.target.value)}
+                    className="mt-1 w-full md:w-1/2 border-gray-300 rounded-md shadow-sm"
+                >
+                    <option value="">-- Select a Class --</option>
+                    {classes.filter(c => !c.isCompleted).map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                </select>
+            </div>
 
-                        return (
-                            <div key={cls.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
-                                <div className="p-5 bg-gray-50 border-b">
-                                    <h3 className="text-lg font-bold text-gray-800">{cls.name}</h3>
-                                </div>
-                                <div className="p-5">
-                                    <ul className="divide-y divide-gray-200">
-                                        {members.map(member => {
-                                            const activeRecord = attendanceRecords.find(r => r.userId === member.id && r.classId === cls.id && !r.checkOutTime);
-                                            const isCheckedIn = !!activeRecord;
-                                            const role = member.role;
-
-                                            return (
-                                                <li key={member.id} className="flex justify-between items-center py-3">
-                                                    <div>
-                                                        <p className="font-medium text-gray-900">{member.firstName} {member.lastName}</p>
-                                                        <p className="text-sm text-gray-500">{role}</p>
-                                                    </div>
-                                                    <div className="flex items-center space-x-2">
-                                                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${isCheckedIn ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                                                            {isCheckedIn ? 'Checked In' : 'Checked Out'}
-                                                        </span>
-                                                        <button
-                                                            onClick={() => handleCheckInOut(member.id, cls.id, role, `${member.firstName} ${member.lastName}`)}
-                                                            className={`px-4 py-2 text-sm font-medium rounded-md text-white ${isCheckedIn ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
-                                                        >
-                                                            {isCheckedIn ? <UserRoundMinus className="h-5 w-5" /> : <UserRoundCheck className="h-5 w-5" />}
-                                                        </button>
-                                                    </div>
-                                                </li>
-                                            );
-                                        })}
-                                    </ul>
-                                </div>
-                            </div>
-                        );
-                    })}
+            {classRoster && (
+                <div className="space-y-6">
+                    {/* Instructors Section */}
+                    <div>
+                        <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-3">Instructors & Support</h3>
+                        <ul className="space-y-2">
+                            {[classRoster.leadInstructor, ...classRoster.instructors, ...classRoster.support].filter(Boolean).map(person => {
+                                const attendanceRecord = getAttendanceStatus(person.id);
+                                return (
+                                    <li key={person.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                        <div>
+                                            <p className="font-medium">{person.firstName} {person.lastName}</p>
+                                            <p className="text-xs text-gray-500">{person.role}</p>
+                                        </div>
+                                        {attendanceRecord ? (
+                                            <div className="flex items-center space-x-2">
+                                                <span className="text-sm font-semibold text-green-600">Checked In</span>
+                                                <button onClick={() => handleManualCheckOut(attendanceRecord.id)} className="px-3 py-1 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
+                                                    <LogOut className="inline h-4 w-4 mr-1"/> Check Out
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button onClick={() => handleManualCheckIn(person, selectedClassId)} className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
+                                                <LogIn className="inline h-4 w-4 mr-1"/> Check In
+                                            </button>
+                                        )}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
+                    {/* Students Section */}
+                    <div>
+                        <h3 className="text-lg font-semibold text-gray-700 border-b pb-2 mb-3">Participants</h3>
+                        <ul className="space-y-2">
+                            {classRoster.students.map(student => {
+                                const attendanceRecord = getAttendanceStatus(student.id);
+                                return (
+                                    <li key={student.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                        <div>
+                                            <p className="font-medium">{student.firstName} {student.lastName}</p>
+                                            <p className="text-xs text-gray-500">{student.role}</p>
+                                        </div>
+                                        {attendanceRecord ? (
+                                            <div className="flex items-center space-x-2">
+                                                <span className="text-sm font-semibold text-green-600">Checked In</span>
+                                                <button onClick={() => handleManualCheckOut(attendanceRecord.id)} className="px-3 py-1 text-xs font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
+                                                    <LogOut className="inline h-4 w-4 mr-1"/> Check Out
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button onClick={() => handleManualCheckIn(student, selectedClassId)} className="px-3 py-1 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
+                                                <LogIn className="inline h-4 w-4 mr-1"/> Check In
+                                            </button>
+                                        )}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </div>
                 </div>
-            ) : (
-                <p className="text-center text-gray-500">You are not authorized to manage attendance for any classes.</p>
             )}
         </div>
     );

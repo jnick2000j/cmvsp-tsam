@@ -4,45 +4,32 @@ import { Users, GraduationCap, UserRoundCheck } from 'lucide-react';
 import CheckInOutPortal from './CheckInOutPortal';
 import AttendanceTable from './AttendanceTable';
 import { INSTRUCTOR_ROLES, SUPPORT_ROLES } from '../constants';
+import InstructorAttendance from './InstructorAttendance';
+import SupportAttendance from './SupportAttendance';
 
 const AttendanceTabs = ({ user, allUsers, classes, stations, attendanceRecords, subView, setSubView }) => {
     
-    // This filter now correctly shows all non-completed classes to instructors and admins.
     const authorizedClasses = classes.filter(c => !c.isCompleted);
 
     const renderSubView = () => {
         switch (subView) {
-            case 'checkInOut':
-                return <CheckInOutPortal user={user} classes={authorizedClasses} allUsers={allUsers} attendanceRecords={attendanceRecords} />;
-            case 'participant':
-                const participantRecords = attendanceRecords.filter(r => {
-                    const recordUser = allUsers.find(u => u.id === r.userId);
-                    return recordUser && recordUser.role === 'Student';
-                });
+            case 'participantAttendance':
                 return <AttendanceTable
                     title="Participant Attendance"
                     description="A log of all student check-in and check-out times for relevant classes and stations."
-                    records={participantRecords}
+                    records={attendanceRecords.filter(r => allUsers.find(u => u.id === r.userId)?.role === 'Student')}
                     currentUser={user}
                     allUsers={allUsers}
                     classes={classes}
                     stations={stations}
                 />;
-            case 'instructional':
-                const instructionalRecords = attendanceRecords.filter(r =>
-                    INSTRUCTOR_ROLES.includes(r.userRole) || SUPPORT_ROLES.includes(r.userRole) || allUsers.find(u => u.id === r.userId)?.isAdmin
-                );
-                return <AttendanceTable
-                    title="Instructor Attendance"
-                    description="A log of all check-in and check-out times for instructors and support staff."
-                    records={instructionalRecords}
-                    currentUser={user}
-                    allUsers={allUsers}
-                    classes={classes}
-                    stations={stations}
-                />;
+            case 'instructorAttendance':
+                return <InstructorAttendance classes={classes} allUsers={allUsers} attendanceRecords={attendanceRecords} stations={stations} />;
+            case 'supportAttendance':
+                return <SupportAttendance classes={classes} allUsers={allUsers} attendanceRecords={attendanceRecords} stations={stations} />;
+            case 'checkInOut':
             default:
-                 return <CheckInOutPortal user={user} classes={authorizedClasses} allUsers={allUsers} attendanceRecords={attendanceRecords} />;
+                 return <CheckInOutPortal user={user} classes={authorizedClasses} allUsers={allUsers} attendanceRecords={attendanceRecords} stations={stations} />;
         }
     };
 
@@ -50,9 +37,10 @@ const AttendanceTabs = ({ user, allUsers, classes, stations, attendanceRecords, 
         <div className="p-4 sm:p-6 lg:p-8">
             <div className="border-b border-gray-200 mb-6">
                 <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                    <button onClick={() => setSubView('checkInOut')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${subView === 'checkInOut' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserRoundCheck className="mr-2" size={18}/> Check In & Out</button>
-                    <button onClick={() => setSubView('participant')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${subView === 'participant' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Users className="mr-2" size={18}/> Participant Log</button>
-                    <button onClick={() => setSubView('instructional')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${subView === 'instructional' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><GraduationCap className="mr-2" size={18}/> Instructor Attendance</button>
+                    <button onClick={() => setSubView('checkInOut')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${subView === 'checkInOut' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserRoundCheck className="mr-2" size={18}/> Class Check In/Out</button>
+                    <button onClick={() => setSubView('participantAttendance')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${subView === 'participantAttendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Users className="mr-2" size={18}/> Participant Attendance</button>
+                    <button onClick={() => setSubView('instructorAttendance')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${subView === 'instructorAttendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><GraduationCap className="mr-2" size={18}/> Instructor Attendance</button>
+                    <button onClick={() => setSubView('supportAttendance')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${subView === 'supportAttendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Users className="mr-2" size={18}/> Support Attendance</button>
                 </nav>
             </div>
             {renderSubView()}
