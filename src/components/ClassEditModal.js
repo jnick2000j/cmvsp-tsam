@@ -1,5 +1,5 @@
 // src/components/ClassEditModal.js
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { doc, updateDoc, addDoc, collection, arrayRemove } from 'firebase/firestore';
 import { db } from '../firebaseConfig';
 import { appId, INSTRUCTOR_ROLES, SUPPORT_ROLES } from '../constants';
@@ -56,28 +56,45 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
 
 
 const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser, waivers, branding }) => {
-    const [formData, setFormData] = useState({ name: '', startDate: '', endDate: '', hours: '', location: '', summary: '', leadInstructorId: '', supportNeeds: [], studentGroups: {}, requiredWaivers: [], isPrerequisiteUploadRequired: false, isHidden: false, visibleToRoles: [], logoUrl: '', isCompleted: false });
+    const [formData, setFormData] = useState({});
     const [numGroups, setNumGroups] = useState(1);
 
     const allRoles = useMemo(() => ['Student', ...INSTRUCTOR_ROLES, ...SUPPORT_ROLES], []);
+    
+    const getInitialFormData = useCallback(() => ({
+        name: '', 
+        startDate: '', 
+        endDate: '', 
+        hours: '', 
+        location: '', 
+        summary: '', 
+        leadInstructorId: currentUser?.uid || '', 
+        supportNeeds: [], 
+        studentGroups: {}, 
+        requiredWaivers: [], 
+        isPrerequisiteUploadRequired: false, 
+        isHidden: false, 
+        visibleToRoles: [], 
+        logoUrl: '', 
+        isCompleted: false
+    }), [currentUser]);
 
     useEffect(() => {
-        if (classToEdit) {
-            setFormData({ 
-                ...classToEdit, 
-                supportNeeds: classToEdit.supportNeeds || [], 
-                studentGroups: classToEdit.studentGroups || {}, 
-                requiredWaivers: classToEdit.requiredWaivers || [], 
-                isPrerequisiteUploadRequired: classToEdit.isPrerequisiteUploadRequired || false,
-                isHidden: classToEdit.isHidden || false,
-                visibleToRoles: classToEdit.visibleToRoles || [],
-                logoUrl: classToEdit.logoUrl || '',
-                isCompleted: classToEdit.isCompleted || false,
-            });
-        } else {
-            setFormData({ name: '', startDate: '', endDate: '', hours: '', location: '', summary: '', leadInstructorId: instructors[0]?.id || '', supportNeeds: [], studentGroups: {}, requiredWaivers: [], isPrerequisiteUploadRequired: false, isHidden: false, visibleToRoles: [], logoUrl: '', isCompleted: false });
+        if (isOpen) {
+            if (classToEdit) {
+                const data = {
+                    ...getInitialFormData(), 
+                    ...classToEdit,
+                };
+                setFormData(data);
+                const maxGroup = Object.values(data.studentGroups || {}).reduce((max, num) => Math.max(max, num), 1);
+                setNumGroups(maxGroup);
+            } else {
+                setFormData(getInitialFormData());
+                setNumGroups(1);
+            }
         }
-    }, [classToEdit, instructors]);
+    }, [classToEdit, isOpen, getInitialFormData]);
 
     if (!isOpen) return null;
 
@@ -92,15 +109,16 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
 
     const handleWaiverChange = (waiverId) => {
         setFormData(prev => {
-            const newWaivers = prev.requiredWaivers.includes(waiverId)
-                ? prev.requiredWaivers.filter(id => id !== waiverId)
-                : [...prev.requiredWaivers, waiverId];
+            const currentWaivers = prev.requiredWaivers || [];
+            const newWaivers = currentWaivers.includes(waiverId)
+                ? currentWaivers.filter(id => id !== waiverId)
+                : [...currentWaivers, waiverId];
             return { ...prev, requiredWaivers: newWaivers };
         });
     };
 
     const handleSupportChange = (index, field, value) => {
-        const newNeeds = [...formData.supportNeeds];
+        const newNeeds = [...(formData.supportNeeds || [])];
         if (field === 'assignedUserId') {
             const selectedUser = allUsers.find(u => u.id === value);
             newNeeds[index].assignedUserId = value;
@@ -112,7 +130,8 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
     };
 
     const addSupportNeed = () => {
-        setFormData({ ...formData, supportNeeds: [...formData.supportNeeds, { id: Date.now().toString(), need: '', date: '', startTime: '', endTime: '', assignedUserId: '', assignedUserName: '' }] });
+        const currentNeeds = formData.supportNeeds || [];
+        setFormData({ ...formData, supportNeeds: [...currentNeeds, { id: Date.now().toString(), need: '', date: '', startTime: '', endTime: '', assignedUserId: '', assignedUserName: '' }] });
     };
 
     const removeSupportNeed = (index) => {
@@ -182,8 +201,8 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                 <div className="p-6 space-y-4 overflow-y-auto">
                     <div><label className="block text-sm font-medium text-gray-700">Class Name</label><input name="name" value={formData.name || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label className="block text-sm font-medium text-gray-700">Start Date</label><input type="date" name="startDate" value={formData.startDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
-                        <div><label className="block text-sm font-medium text-gray-700">End Date</label><input type="date" name="endDate" value={formData.endDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
+                         <div><label className="block text-sm font-medium text-gray-700">Start Date</label><input type="date" name="startDate" value={formData.startDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
+                         <div><label className="block text-sm font-medium text-gray-700">End Date</label><input type="date" name="endDate" value={formData.endDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <div><label className="block text-sm font-medium text-gray-700">Number of Hours</label><input type="number" name="hours" value={formData.hours || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
@@ -199,7 +218,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                                 <input
                                     type="checkbox"
                                     name="isPrerequisiteUploadRequired"
-                                    checked={formData.isPrerequisiteUploadRequired}
+                                    checked={formData.isPrerequisiteUploadRequired || false}
                                     onChange={handleInputChange}
                                     className="rounded text-indigo-600"
                                 />
@@ -209,7 +228,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                                 <input
                                     type="checkbox"
                                     name="isCompleted"
-                                    checked={formData.isCompleted}
+                                    checked={formData.isCompleted || false}
                                     onChange={handleInputChange}
                                     disabled={formData.isCompleted}
                                     className="rounded text-indigo-600 disabled:bg-gray-200"
@@ -227,7 +246,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                                 <input
                                     type="checkbox"
                                     name="isHidden"
-                                    checked={formData.isHidden}
+                                    checked={formData.isHidden || false}
                                     onChange={handleInputChange}
                                     className="rounded text-indigo-600"
                                 />
@@ -240,7 +259,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                                 </label>
                                 <MultiSelectDropdown
                                     options={allRoles}
-                                    selected={formData.visibleToRoles}
+                                    selected={formData.visibleToRoles || []}
                                     onChange={handleRoleVisibilityChange}
                                     placeholder="Select roles..."
                                 />
@@ -254,7 +273,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                             <label className="block text-sm font-medium text-gray-700">Assign Logo</label>
                             <select
                                 name="logoUrl"
-                                value={formData.logoUrl}
+                                value={formData.logoUrl || ''}
                                 onChange={handleInputChange}
                                 className="mt-1 w-full border-gray-300 rounded-md shadow-sm"
                             >
@@ -285,7 +304,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                     <div>
                         <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Support Needs</h3>
                         <div className="mt-2 space-y-2">
-                            {formData.supportNeeds.map((need, index) => (
+                            {formData.supportNeeds && formData.supportNeeds.map((need, index) => (
                                 <div key={need.id} className="grid grid-cols-5 gap-2 items-center">
                                     <input value={need.need} onChange={(e) => handleSupportChange(index, 'need', e.target.value)} placeholder="Need (e.g., Patient)" className="col-span-1 border-gray-300 rounded-md shadow-sm text-sm" />
                                     <input type="date" value={need.date} onChange={(e) => handleSupportChange(index, 'date', e.target.value)} className="col-span-1 border-gray-300 rounded-md shadow-sm text-sm" />

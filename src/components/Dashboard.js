@@ -1,18 +1,19 @@
 // src/components/Dashboard.js
 import React, { useMemo } from 'react';
 import { LogOut, UserCheck } from 'lucide-react';
-import PendingActions from './PendingActions';
+import PendingActions from './PendingActions'; 
 
-const Dashboard = ({
-    user,
-    isInstructor,
-    isStudent,
-    enrolledClassesDetails,
-    handleCancelEnrollment,
+const Dashboard = ({ 
+    user, 
+    isInstructor, 
+    isStudent, 
+    enrolledClassesDetails, 
+    dailyCheckIns, 
+    handlePrerequisiteCheckin, 
+    handleCancelEnrollment, 
     setActiveClassId,
     myAssignments,
     attendanceRecords,
-    handleInstructorCheckInOut,
     classes,
     paginatedPendingActions,
     handleApproveAction,
@@ -27,6 +28,8 @@ const Dashboard = ({
     onApproveUser
 }) => {
 
+    const todayISO = new Date().toISOString().split('T')[0];
+    
     const activeEntries = useMemo(() => timeClockEntries.filter(e => e.clockOutTime === null), [timeClockEntries]);
 
     const getUserName = (userId) => {
@@ -37,11 +40,11 @@ const Dashboard = ({
     const roleCounts = useMemo(() => activeEntries.reduce((acc, entry) => {
         const user = allUsers.find(u => u.id === entry.userId);
         const role = user ? user.ability : 'Guest Patroller';
-        if (role) acc[role] = (acc[role] || 0) + 1;
+        if(role) acc[role] = (acc[role] || 0) + 1;
         return acc;
     }, {}), [activeEntries, allUsers]);
 
-    const areaCounts = useMemo(() => activeEntries.reduce((acc, entry) => {
+     const areaCounts = useMemo(() => activeEntries.reduce((acc, entry) => {
         acc[entry.area] = (acc[entry.area] || 0) + 1;
         return acc;
     }, {}), [activeEntries]);
@@ -56,26 +59,24 @@ const Dashboard = ({
                             <h2 className="text-2xl font-bold text-gray-900 mb-4">My Courses</h2>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 {enrolledClassesDetails.map(course => {
+                                    const todaysCheckIn = dailyCheckIns.find(dc => dc.studentId === user.uid && dc.classId === course.id && dc.checkInDate === todayISO);
                                     const canCancel = (new Date(course.startDate).getTime() - new Date().getTime()) / (1000 * 60 * 60) > 24;
                                     return (
                                         <div key={course.id} className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col">
-                                            <div className="p-5 border-b flex-grow">
-                                                <h3 className="text-lg font-bold text-gray-800">{course.name}</h3>
-                                                <p className="text-sm text-gray-500">{course.startDate}</p>
-                                                {course.studentGroups?.[user.uid] && <p className="text-sm font-semibold text-indigo-600 mt-1">Your Group: Group {course.studentGroups[user.uid]}</p>}
-                                            </div>
+                                             <div className="p-5 border-b flex-grow">
+                                                 <h3 className="text-lg font-bold text-gray-800">{course.name}</h3>
+                                                 <p className="text-sm text-gray-500">{course.startDate}</p>
+                                                 {course.studentGroups?.[user.uid] && <p className="text-sm font-semibold text-indigo-600 mt-1">Your Group: Group {course.studentGroups[user.uid]}</p>}
+                                             </div>
                                             <div className="p-4 bg-gray-50 border-t space-y-2">
-                                                <button
-                                                    onClick={() => setActiveClassId(course.id)}
-                                                    className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-hover"
-                                                >
-                                                    View Stations
-                                                </button>
-                                                <button
-                                                    onClick={() => handleCancelEnrollment(course.id)}
-                                                    disabled={!canCancel}
-                                                    className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                                                >
+                                                {todaysCheckIn?.status === 'approved' ? (
+                                                        <button onClick={() => setActiveClassId(course.id)} className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">Go to Stations</button>
+                                                    ) : todaysCheckIn?.status === 'pending' ? (
+                                                        <p className="text-center text-sm font-medium text-yellow-700">Check-in Pending</p>
+                                                    ) : (
+                                                        <button onClick={() => handlePrerequisiteCheckin(course)} className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">Check In for Today</button>
+                                                    )}
+                                                <button onClick={() => handleCancelEnrollment(course.id)} disabled={!canCancel} className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
                                                     <LogOut className="mr-2 h-4 w-4" /> Cancel Enrollment
                                                 </button>
                                             </div>
@@ -93,10 +94,10 @@ const Dashboard = ({
                 </div>
             ) : (
                 <div className="lg:col-span-3 space-y-8">
-                    {isPatrolLeadership && (
+                     {isPatrolLeadership && (
                         <div>
                             <h2 className="text-2xl font-bold text-gray-900 mb-4">Patrol Shift Status</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                                 <div className="bg-white rounded-xl shadow-lg p-5">
                                     <h3 className="font-bold text-lg text-gray-800 mb-2">Active Roles</h3>
                                     <ul className="space-y-1 text-sm">
@@ -107,15 +108,15 @@ const Dashboard = ({
                                 </div>
                                 <div className="bg-white rounded-xl shadow-lg p-5">
                                     <h3 className="font-bold text-lg text-gray-800 mb-2">Area Assignments</h3>
-                                    <ul className="space-y-1 text-sm">
+                                     <ul className="space-y-1 text-sm">
                                         {Object.entries(areaCounts).map(([area, count]) => (
                                             <li key={area} className="flex justify-between"><span>{area}:</span><span className="font-semibold">{count}</span></li>
                                         ))}
                                     </ul>
                                 </div>
                             </div>
-                            <div className="bg-white rounded-xl shadow-lg p-5">
-                                <h3 className="font-bold text-lg text-gray-800 mb-4">Active Staff ({activeEntries.length})</h3>
+                             <div className="bg-white rounded-xl shadow-lg p-5">
+                                 <h3 className="font-bold text-lg text-gray-800 mb-4">Active Staff ({activeEntries.length})</h3>
                                 <table className="min-w-full divide-y divide-gray-200 text-sm">
                                     <thead className="bg-gray-50">
                                         <tr>
@@ -137,9 +138,9 @@ const Dashboard = ({
                             </div>
                         </div>
                     )}
-
+                    
                     {(user.isAdmin) && (
-                        <div>
+                         <div>
                             <h2 className="text-2xl font-bold text-gray-900 mb-4">Pending Actions</h2>
                             {usersForApproval.length > 0 && (
                                 <div className="bg-white rounded-xl shadow-lg p-5 mb-8">
@@ -152,7 +153,7 @@ const Dashboard = ({
                                                     <p className="text-sm text-gray-500">{u.email}</p>
                                                 </div>
                                                 <button onClick={() => onApproveUser(u.id)} className="px-3 py-1.5 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 flex items-center">
-                                                    <UserCheck className="h-4 w-4 mr-1.5" /> Approve
+                                                    <UserCheck className="h-4 w-4 mr-1.5"/> Approve
                                                 </button>
                                             </li>
                                         ))}
@@ -166,7 +167,7 @@ const Dashboard = ({
                                 onDeny={handleDenyAction}
                                 onNext={() => setPendingActionsPage(p => p + 1)}
                                 onPrev={() => setPendingActionsPage(p => p - 1)}
-                                hasNext={(pendingActionsPage + 1) * 5 < allPendingActions.length}
+                                hasNext={ (pendingActionsPage + 1) * 5 < allPendingActions.length}
                                 hasPrev={pendingActionsPage > 0}
                             />
                         </div>
@@ -176,20 +177,15 @@ const Dashboard = ({
                         <div className="bg-white rounded-xl shadow-lg p-5">
                             <h3 className="text-lg font-bold text-gray-800 mb-3">My Training Assignments</h3>
                             <ul className="space-y-2">
-                                {myAssignments.map(assignment => {
-                                    const isActive = attendanceRecords.some(r => r.userId === user.uid && !r.checkOutTime && (r.stationId === assignment.id || r.classId === assignment.id));
-                                    return (
+                                {myAssignments.map(assignment => (
                                         <li key={assignment.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
                                             <div>
                                                 <p className="font-medium text-gray-800">{assignment.name}</p>
                                                 <p className="text-sm text-gray-500">{assignment.type === 'station' ? classes.find(c => c.id === assignment.classId)?.name : 'Class Lead'}</p>
                                             </div>
-                                            <button onClick={() => handleInstructorCheckInOut(assignment)} disabled={!isActive && attendanceRecords.some(r => r.userId === user.uid && !r.checkOutTime)} className={`px-4 py-2 text-sm font-medium rounded-md text-white ${isActive ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} disabled:bg-gray-400`}>
-                                                {isActive ? 'Check Out' : 'Check In'}
-                                            </button>
                                         </li>
                                     )
-                                })}
+                                )}
                             </ul>
                         </div>
                     )}

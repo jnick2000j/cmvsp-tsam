@@ -1,10 +1,11 @@
 // src/components/TimeClock.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MOUNTAIN_AREAS, SHIFT_TYPES, PATROLS } from '../constants';
 import { LogIn, LogOut } from 'lucide-react';
 
 // PinPad component
 const PinPad = ({ onPinChange, pin, pinLength = 10 }) => {
+    // ... PinPad component remains the same
     const [localPin, setLocalPin] = useState(pin);
 
     const handleButtonClick = (num) => {
@@ -51,7 +52,7 @@ const PinPad = ({ onPinChange, pin, pinLength = 10 }) => {
 };
 
 
-const TimeClock = ({ users, onClockIn, onClockOut, branding, timeClocks }) => {
+const TimeClock = ({ users, onClockIn, onClockOut, branding, timeClocks, timeClockEntries }) => {
     const [isDeviceLoggedIn, setIsDeviceLoggedIn] = useState(false);
     const [devicePinInput, setDevicePinInput] = useState('');
     const [deviceLoginError, setDeviceLoginError] = useState('');
@@ -66,6 +67,29 @@ const TimeClock = ({ users, onClockIn, onClockOut, branding, timeClocks }) => {
     const [guestName, setGuestName] = useState('');
     const [guestAgency, setGuestAgency] = useState('');
     const [message, setMessage] = useState('');
+    const [error, setError] = useState('');
+    
+    const activeEntries = React.useMemo(() => timeClockEntries.filter(e => e.clockOutTime === null), [timeClockEntries]);
+
+    const resetClockState = () => {
+        setSelectedUserId('');
+        setUserPinInput('');
+        setIsGuest(false);
+        setGuestName('');
+        setGuestAgency('');
+        setMessage('');
+        setError('');
+    };
+
+    useEffect(() => {
+        let timer;
+        if (message.includes('successfully')) {
+            timer = setTimeout(() => {
+                resetClockState();
+            }, 5000); // 5 seconds
+        }
+        return () => clearTimeout(timer); // Cleanup the timer
+    }, [message]);
 
     const handleDeviceLogin = (e) => {
         e.preventDefault();
@@ -88,40 +112,59 @@ const TimeClock = ({ users, onClockIn, onClockOut, branding, timeClocks }) => {
 
     const handleClockIn = () => {
         setMessage('');
+        setError('');
+
+        const isAlreadyClockedIn = activeEntries.some(entry => 
+            isGuest ? (entry.name === guestName && entry.agency === guestAgency) : entry.userId === selectedUserId
+        );
+
+        if (isAlreadyClockedIn) {
+            setError("You are already clocked in. Please clock OUT before clocking IN again.");
+            return;
+        }
+
         if (isGuest) {
             if (!guestName || !guestAgency) {
-                setMessage("Please enter guest name and agency.");
+                setError("Please enter guest name and agency.");
                 return;
             }
             onClockIn({ isGuest: true, name: guestName, agency: guestAgency, area, shiftType: 'N/A', patrol: 'N/A' });
-            setGuestName('');
-            setGuestAgency('');
+            setMessage("Guest Clocked IN successfully!");
         } else {
             if (!selectedUserId || !userPinInput) {
-                setMessage("Please select a user and enter a PIN.");
+                setError("Please select a user and enter a PIN.");
                 return;
             }
             onClockIn({ isGuest: false, userId: selectedUserId, pin: userPinInput, area, shiftType, patrol });
-            setUserPinInput('');
+            setMessage("Clocked IN successfully!");
         }
-        setMessage("Clocked IN successfully!");
     };
 
     const handleClockOut = () => {
         setMessage('');
+        setError('');
+
+        const activeEntry = activeEntries.find(entry =>
+            isGuest ? (entry.name === guestName && entry.agency === guestAgency) : entry.userId === selectedUserId
+        );
+
+        if (!activeEntry) {
+            setError("You are not currently clocked in.");
+            return;
+        }
+        
         if (isGuest) {
              if (!guestName || !guestAgency) {
-                setMessage("Please enter guest name and agency.");
+                setError("Please enter guest name and agency.");
                 return;
             }
             onClockOut({ isGuest: true, name: guestName, agency: guestAgency });
         } else {
             if (!selectedUserId || !userPinInput) {
-                setMessage("Please select a user and enter a PIN.");
+                setError("Please select a user and enter a PIN.");
                 return;
             }
             onClockOut({ isGuest: false, userId: selectedUserId, pin: userPinInput });
-            setUserPinInput('');
         }
         setMessage("Clocked OUT successfully!");
     };
@@ -171,6 +214,7 @@ const TimeClock = ({ users, onClockIn, onClockOut, branding, timeClocks }) => {
                 </div>
                 
                 {message && <p className="text-center text-green-500 mb-4">{message}</p>}
+                {error && <p className="text-center text-red-500 mb-4">{error}</p>}
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="space-y-4">

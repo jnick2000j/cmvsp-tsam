@@ -161,13 +161,13 @@ const ProfileManagement = ({ user }) => {
                             <label className="block text-sm font-medium text-gray-700">New Time Clock PIN</label>
                             <div className="flex items-center space-x-4 mt-1">
                                 <input name="timeClockPin" type="password" value={newPin} onChange={(e) => setNewPin(e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm" placeholder="Enter a new 4+ digit PIN"/>
-                                <button type="button" onClick={handlePinUpdate} className="px-4 py-2 bg-gray-600 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 whitespace-nowrap">
+                                <button type="button" onClick={handlePinUpdate} className="px-4 py-2 bg-primary text-white font-semibold rounded-lg shadow-md hover:bg-primary-hover whitespace-nowrap">
                                     Update PIN
                                 </button>
                             </div>
                         </div>
                         <div className="mt-4">
-                            <button type="button" onClick={handlePasswordReset} className="flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                            <button type="button" onClick={handlePasswordReset} className="flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-hover">
                                 <Key className="h-4 w-4 mr-2" /> Send Password Reset Email
                             </button>
                         </div>

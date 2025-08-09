@@ -64,18 +64,32 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
     const instructors = useMemo(() => allUsers.filter(u => u.isAdmin || INSTRUCTOR_ROLES.includes(u.role)), [allUsers]);
 
     useEffect(() => {
-        if (stationToEdit) {
-            setFormData({ 
-                ...stationToEdit, 
-                skills: stationToEdit.skills || [], 
-                supportNeeds: stationToEdit.supportNeeds || [],
-                leadInstructorId: stationToEdit.leadInstructorId || '',
-                skillAssignments: stationToEdit.skillAssignments || {}
-            });
-        } else {
-            setFormData({ name: '', icon: 'BookOpen', skills: [{ id: Date.now().toString(), text: '' }], classId: classes[0]?.id || '', date: '', startTime: '', endTime: '', hours: '', location: '', summary: '', supportNeeds: [], leadInstructorId: '', skillAssignments: {} });
+        if (isOpen) {
+            if (stationToEdit) {
+                // Normalize skills to ensure they are objects with an id and text
+                const normalizedSkills = (stationToEdit.skills || []).map((skill, index) => {
+                    if (typeof skill === 'string') {
+                        return { id: `skill-${Date.now()}-${index}`, text: skill };
+                    }
+                    return {
+                        ...skill,
+                        id: skill.id || `skill-${Date.now()}-${index}`
+                    };
+                });
+
+                setFormData({
+                    ...stationToEdit,
+                    skills: normalizedSkills,
+                    supportNeeds: stationToEdit.supportNeeds || [],
+                    leadInstructorId: stationToEdit.leadInstructorId || '',
+                    skillAssignments: stationToEdit.skillAssignments || {}
+                });
+            } else {
+                setFormData({ name: '', icon: 'BookOpen', skills: [{ id: Date.now().toString(), text: '' }], classId: classes[0]?.id || '', date: '', startTime: '', endTime: '', hours: '', location: '', summary: '', supportNeeds: [], leadInstructorId: '', skillAssignments: {} });
+            }
         }
-    }, [stationToEdit, classes]);
+    }, [stationToEdit, classes, isOpen]);
+
 
     if (!isOpen) return null;
 
@@ -93,7 +107,9 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
         const skillToRemove = formData.skills[index];
         const newSkills = formData.skills.filter((_, i) => i !== index);
         const newSkillAssignments = {...formData.skillAssignments};
-        delete newSkillAssignments[skillToRemove.id];
+        if (skillToRemove && skillToRemove.id) {
+            delete newSkillAssignments[skillToRemove.id];
+        }
         setFormData({ ...formData, skills: newSkills, skillAssignments: newSkillAssignments });
     };
 
@@ -133,7 +149,7 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
 
         const finalSkills = formData.skills.filter(s => s.text.trim() !== '');
         const finalNeeds = formData.supportNeeds.filter(n => n.need.trim() !== '');
-        
+
         const finalSkillIds = new Set(finalSkills.map(s => s.id));
         const finalSkillAssignments = {};
         for(const skillId in formData.skillAssignments) {
@@ -142,9 +158,9 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
             }
         }
 
-        const dataToSave = { 
-            ...formData, 
-            skills: finalSkills, 
+        const dataToSave = {
+            ...formData,
+            skills: finalSkills,
             supportNeeds: finalNeeds,
             skillAssignments: finalSkillAssignments
         };
@@ -193,22 +209,24 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
                                 {formData.skills.map((skill, index) => (
                                     <div key={skill.id} className="grid grid-cols-3 gap-4 items-center">
                                         <input value={skill.text} onChange={(e) => handleSkillChange(index, e.target.value)} placeholder={`Skill #${index + 1}`} className="col-span-1 border-gray-300 rounded-md shadow-sm" />
-                                        <div className="col-span-2 relative">
-                                            <MultiSelectDropdown
-                                                options={instructors}
-                                                selected={formData.skillAssignments[skill.id] || []}
-                                                onChange={(selectedInstructors) => {
-                                                    setFormData(prev => ({
-                                                        ...prev,
-                                                        skillAssignments: {
-                                                            ...prev.skillAssignments,
-                                                            [skill.id]: selectedInstructors
-                                                        }
-                                                    }));
-                                                }}
-                                            />
+                                        <div className="col-span-2 relative flex items-center">
+                                            <div className="flex-grow">
+                                                <MultiSelectDropdown
+                                                    options={instructors}
+                                                    selected={formData.skillAssignments[skill.id] || []}
+                                                    onChange={(selectedInstructors) => {
+                                                        setFormData(prev => ({
+                                                            ...prev,
+                                                            skillAssignments: {
+                                                                ...prev.skillAssignments,
+                                                                [skill.id]: selectedInstructors
+                                                            }
+                                                        }));
+                                                    }}
+                                                />
+                                            </div>
+                                            <button type="button" onClick={() => removeSkill(index)} className="ml-2 p-2 text-red-500 hover:bg-red-100 rounded-full"><Trash2 size={16} /></button>
                                         </div>
-                                        <button type="button" onClick={() => removeSkill(index)} className="p-2 text-red-500 hover:bg-red-100 rounded-full"><Trash2 size={16} /></button>
                                     </div>
                                 ))}
                                 <button type="button" onClick={addSkill} className="flex items-center text-sm text-indigo-600 hover:text-indigo-800"><PlusCircle size={16} className="mr-1" /> Add Skill</button>

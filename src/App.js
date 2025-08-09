@@ -1,13 +1,14 @@
 // src/App.js
 import React, { useState, useEffect, useMemo } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, query, updateDoc, addDoc, getDocs, where, serverTimestamp, arrayRemove } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, updateDoc, addDoc, getDocs, where, serverTimestamp, arrayRemove, arrayUnion } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
 import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROL_LEADER_ROLES, appId } from './constants';
 
 // Import All Components
 import AuthComponent from './components/AuthComponent';
 import AdminPortal from './components/AdminPortal';
+import MyStations from './components/MyStations';
 import AttendanceTabs from './components/AttendanceTabs';
 import CourseCatalog from './components/CourseCatalog';
 import ProfileManagement from './components/ProfileManagement';
@@ -59,7 +60,6 @@ export default function App() {
     const isClassClockView = window.location.pathname === '/classclock';
 
     useEffect(() => {
-        // ... (useEffect for branding and auth remains the same)
         const brandingRef = doc(db, `artifacts/${appId}/public/data/branding`, 'settings');
         const unsubBranding = onSnapshot(brandingRef, (doc) => {
             if (doc.exists()) {
@@ -100,7 +100,6 @@ export default function App() {
     }, []);
 
     useEffect(() => {
-        // ... (useEffect for data fetching remains the same)
         if (isAuthLoading || (!user && !isTimeClockView && !isClassClockView)) {
             return;
         }
@@ -160,6 +159,31 @@ export default function App() {
         }
         setConfirmAction(null);
     };
+    
+    const handlePrerequisiteCheckin = async (course) => {
+        const todayISO = new Date().toISOString().split('T')[0];
+        const checkInData = {
+            studentId: user.uid,
+            classId: course.id,
+            checkInDate: todayISO,
+            checkInTime: serverTimestamp(),
+            status: 'pending',
+        };
+        await addDoc(collection(db, `artifacts/${appId}/public/data/dailyCheckIns`), checkInData);
+    };
+
+    const handleEnroll = async (classId) => {
+        if (!user) return;
+        const userRef = doc(db, "users", user.uid);
+        try {
+            await updateDoc(userRef, {
+                enrolledClasses: arrayUnion(classId)
+            });
+        } catch (error) {
+            console.error("Error enrolling in class: ", error);
+            setEnrollmentError("Failed to enroll in the class. Please try again.");
+        }
+    };
 
     const handleCancelEnrollment = (classId) => {
         setConfirmAction({
@@ -174,47 +198,55 @@ export default function App() {
         });
     };
 
-    const handleClockInOut = async (data) => {
-        // ... (logic remains the same)
-        const { isGuest, userId, pin, name, agency, area, shiftType } = data;
-        
-        if (!isGuest) {
-            const userToClock = allUsers.find(u => u.id === userId);
-            if (!userToClock || userToClock.timeClockPin !== pin) {
-                alert("Invalid PIN.");
-                return;
-            }
+    const handleClockIn = async (data) => {
+        const { isGuest, userId, pin, name, agency, area, shiftType, patrol } = data;
+        const userToClock = allUsers.find(u => u.id === userId);
+
+        if (!isGuest && (!userToClock || userToClock.timeClockPin !== pin)) {
+            alert("Invalid PIN.");
+            return;
         }
-        
+
+        await addDoc(collection(db, `artifacts/${appId}/public/data/timeClockEntries`), {
+            isGuest,
+            userId: isGuest ? null : userId,
+            name: isGuest ? name : `${userToClock.firstName} ${userToClock.lastName}`,
+            agency: isGuest ? agency : null,
+            area,
+            shiftType,
+            patrol,
+            clockInTime: new Date(),
+            clockOutTime: null,
+        });
+    };
+
+    const handleClockOut = async (data) => {
+        const { isGuest, userId, pin, name, agency } = data;
+        const userToClock = allUsers.find(u => u.id === userId);
+
+        if (!isGuest && (!userToClock || userToClock.timeClockPin !== pin)) {
+            alert("Invalid PIN.");
+            return;
+        }
+
         const activeEntryQuery = isGuest 
             ? query(collection(db, `artifacts/${appId}/public/data/timeClockEntries`), where("name", "==", name), where("agency", "==", agency), where("clockOutTime", "==", null))
             : query(collection(db, `artifacts/${appId}/public/data/timeClockEntries`), where("userId", "==", userId), where("clockOutTime", "==", null));
 
         const activeEntrySnapshot = await getDocs(activeEntryQuery);
-
-        if (activeEntrySnapshot.empty) {
-            await addDoc(collection(db, `artifacts/${appId}/public/data/timeClockEntries`), {
-                isGuest,
-                userId: isGuest ? null : userId,
-                name: isGuest ? name : `${user.firstName} ${user.lastName}`,
-                agency: isGuest ? agency : null,
-                area,
-                shiftType,
-                clockInTime: new Date(),
-                clockOutTime: null,
-            });
-        } else {
+        if (!activeEntrySnapshot.empty) {
             const entryDoc = activeEntrySnapshot.docs[0];
             await updateDoc(doc(db, `artifacts/${appId}/public/data/timeClockEntries`, entryDoc.id), {
                 clockOutTime: new Date()
             });
         }
     };
-
-    const handleClassCheckIn = async (student, course, station) => {
+    
+    const handleClassCheckIn = async (attendee, course, station) => {
         const todayISO = new Date().toISOString().split('T')[0];
         const checkInData = {
-            studentId: student.uid,
+            userId: attendee.uid,
+            role: attendee.role,
             classId: course.id,
             stationId: station.id,
             checkInDate: todayISO,
@@ -232,16 +264,16 @@ export default function App() {
     };
 
 
-    if (isAuthLoading || ((user && !user.firstName) && !isTimeClockView && !isClassClockView)) {
+    if (isAuthLoading || (user && !user.firstName && !isTimeClockView && !isClassClockView)) {
         return <div className="flex items-center justify-center h-screen bg-gray-100"><div className="text-xl font-semibold text-gray-600">Loading Application...</div></div>;
     }
 
     if (isTimeClockView) {
-        return <TimeClock users={allUsers} onClockIn={handleClockInOut} onClockOut={handleClockInOut} branding={branding} timeClocks={timeClocks} />;
+        return <TimeClock users={allUsers} timeClockEntries={timeClockEntries} onClockIn={handleClockIn} onClockOut={handleClockOut} branding={branding} timeClocks={timeClocks} />;
     }
     
     if (isClassClockView) {
-        return <ClassClock users={allUsers} classes={classes} stations={stations} dailyCheckIns={dailyCheckIns} handleClassCheckIn={handleClassCheckIn} handleClassCheckOut={handleClassCheckOut} branding={branding} />;
+        return <ClassClock users={allUsers} classes={classes} stations={stations} dailyCheckIns={dailyCheckIns} handleClassCheckIn={handleClassCheckIn} handleClassCheckOut={handleClassCheckOut} branding={branding} timeClocks={timeClocks} />;
     }
 
 
@@ -256,8 +288,12 @@ export default function App() {
 
     const renderContent = () => {
         const enrolledClassesDetails = classes.filter(c => user.enrolledClasses?.includes(c.id));
+        if(activeClassId) {
+            const activeClass = classes.find(c => c.id === activeClassId);
+            return <MyStations activeClass={activeClass} stations={stations} onBack={() => setActiveClassId(null)} />
+        }
         switch (view) {
-            case 'admin': return <AdminPortal {...{ currentUser: user, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser: handleApproveUser }} />;
+            case 'admin': return <AdminPortal {...{ currentUser: user, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser: handleApproveUser, branding }} />;
             case 'siteBranding': return <div className="p-4 sm:p-6 lg:p-8"><Branding branding={branding} onUpdate={setBranding} /></div>;
             case 'myTraining': 
                 return <MyTraining {...{ 
@@ -265,6 +301,7 @@ export default function App() {
                     enrolledClassesDetails,
                     dailyCheckIns,
                     setActiveClassId,
+                    handlePrerequisiteCheckin,
                     handleCancelEnrollment,
                     allUsers, 
                     classes, 
@@ -273,7 +310,7 @@ export default function App() {
                     generateClassPdf 
                 }} />;
             case 'attendance': return <AttendanceTabs {...{ user, allUsers, classes, stations, attendanceRecords, subView, setSubView }} />;
-            case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: () => {}, enrollmentError, branding }} />;
+            case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: handleEnroll, enrollmentError, branding }} />;
             case 'profile': return <ProfileManagement {...{ user, setConfirmAction }} />;
             case 'scheduling': 
                 return hasSchedulingAccess ? <Scheduling user={user} allUsers={allUsers} shifts={shifts} timeClockEntries={timeClockEntries} /> : <div>Access Denied</div>;
@@ -284,7 +321,9 @@ export default function App() {
                     isInstructor,
                     isStudent: !isInstructor && !isSupport,
                     enrolledClassesDetails, 
+                    dailyCheckIns,
                     setActiveClassId, 
+                    handlePrerequisiteCheckin,
                     handleCancelEnrollment,
                     myAssignments, 
                     attendanceRecords, 

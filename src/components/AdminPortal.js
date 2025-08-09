@@ -13,7 +13,7 @@ import TimeClockManagement from './TimeClockManagement';
 import { Search, Edit, Trash2, Layers, BookOpen, UserCog, FileSignature, Mail, Calendar, Smartphone, UserCheck, PlusCircle, Copy } from 'lucide-react';
 import Icon from './Icon';
 
-const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser }) => {
+const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser, branding }) => {
     const [adminView, setAdminView] = useState('users');
     const [searchTerm, setSearchTerm] = useState('');
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -57,7 +57,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             }
         });
     };
-    
+
     // ... (other handlers remain the same) ...
     const handleCopyClass = async (classToCopy) => {
         try {
@@ -86,7 +86,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             console.error('Failed to copy station.', err);
         }
     };
-    
+
     const handleDeactivateUserClick = (userId, userName) => {
         setConfirmAction({
             title: "Delete User Data",
@@ -100,7 +100,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             }
         });
     };
-    
+
     const handleSaveShift = async (shiftData) => {
         try {
             if (shiftData.id) {
@@ -113,7 +113,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             console.error("Error saving shift:", err);
         }
     };
-    
+
     const handleDeleteShift = async (shiftId) => {
          try {
             await deleteDoc(doc(db, `artifacts/${appId}/public/data/shifts`, shiftId));
@@ -125,7 +125,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
 
     const handleEditUser = (user) => { setEditingUser(user); setIsUserModalOpen(true); };
     const handleCloseUserModal = () => { setIsUserModalOpen(false); setEditingUser(null); };
-    
+
     const handleEditStation = (station) => { setEditingStation(station); setIsStationModalOpen(true); };
     const handleAddStation = () => { setEditingStation(null); setIsStationModalOpen(true); };
     const handleCloseStationModal = () => { setIsStationModalOpen(false); setEditingStation(null); };
@@ -164,7 +164,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             }
         });
     };
-    
+
     const handleSaveTimeClock = async (timeClockData) => {
         try {
             await addDoc(collection(db, `artifacts/${appId}/public/data/timeclocks`), timeClockData);
@@ -188,7 +188,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
         <>
             <UserEditModal isOpen={isUserModalOpen} onClose={handleCloseUserModal} userToEdit={editingUser} onSave={() => {}} />
             <StationEditModal isOpen={isStationModalOpen} onClose={handleCloseStationModal} stationToEdit={editingStation} onSave={() => {}} classes={classes} allUsers={allUsers} />
-            <ClassEditModal isOpen={isClassModalOpen} onClose={handleCloseClassModal} classToEdit={editingClass} onSave={() => {}} instructors={instructors} allUsers={allUsers} currentUser={currentUser} waivers={waivers} />
+            <ClassEditModal isOpen={isClassModalOpen} onClose={handleCloseClassModal} classToEdit={editingClass} onSave={() => {}} instructors={instructors} allUsers={allUsers} currentUser={currentUser} waivers={waivers} branding={branding} />
 
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="border-b border-gray-200 mb-6">
@@ -201,7 +201,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         <button onClick={() => setAdminView('waivers')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'waivers' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><FileSignature className="mr-2" size={18}/> Waiver Management</button>
                     </nav>
                 </div>
-                
+
                  {adminView === 'users' && (
                     <>
                         <div className="sm:flex sm:items-center sm:justify-between">

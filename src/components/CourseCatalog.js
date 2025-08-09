@@ -27,7 +27,7 @@ const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError
                 course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (getLeadInstructorName(course.leadInstructorId) || '').toLowerCase().includes(searchTerm.toLowerCase())
             );
-    }, [classes, searchTerm, user, allUsers]);
+    }, [classes, searchTerm, user, allUsers, getLeadInstructorName]);
 
     return (
         <div className="p-4 sm:p-6 lg:p-8 space-y-6">
