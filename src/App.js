@@ -14,7 +14,7 @@ import HelpTabs from './components/HelpTabs';
 import CourseCatalog from './components/CourseCatalog';
 import TrainingHistory from './components/TrainingHistory';
 import ProfileManagement from './components/ProfileManagement';
-import SkillsModal from './components/SkillsModal';
+import SkillsModal from './components/skillsModal';
 import WaiverSigningModal from './components/WaiverSigningModal';
 import CertificateModal from './components/CertificateModal';
 import ConfirmationModal from './components/ConfirmationModal';
@@ -22,6 +22,8 @@ import PrerequisiteUploadModal from './components/PrerequisiteUploadModal';
 import Dashboard from './components/Dashboard';
 import Scheduling from './components/Scheduling';
 import TimeClock from './components/TimeClock';
+import MyTraining from './components/MyTraining';
+import Branding from './components/Branding';
 
 import { generateClassPdf } from './utils/pdfGenerator';
 import { LayoutDashboard, ClipboardList, Handshake, Library, Clock, User, Shield, Calendar, BarChart, Smartphone } from 'lucide-react';
@@ -41,7 +43,6 @@ export default function App() {
         accentHover: '#b13710',
     });
     
-    // Existing State
     const [stations, setStations] = useState([]);
     const [classes, setClasses] = useState([]);
     const [waivers, setWaivers] = useState([]);
@@ -53,15 +54,10 @@ export default function App() {
     const [checkIns, setCheckIns] = useState([]);
     const [attendanceRecords, setAttendanceRecords] = useState([]);
     const [roleRequests, setRoleRequests] = useState([]);
-
-    // Scheduling State
     const [shifts, setShifts] = useState([]);
     const [timeClockEntries, setTimeClockEntries] = useState([]);
     const [timeClocks, setTimeClocks] = useState([]);
-
-    const [loginMessage, setLoginMessage] = useState(''); // Handles all login screen messages
-
-
+    const [loginMessage, setLoginMessage] = useState('');
     const [error, setError] = useState('');
     const [view, setView] = useState('dashboard');
     const [subView, setSubView] = useState('');
@@ -79,7 +75,6 @@ export default function App() {
     const [isPrerequisiteModalOpen, setIsPrerequisiteModalOpen] = useState(false);
     const [classForUpload, setClassForUpload] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
-
 
     const isTimeClockView = window.location.pathname === '/timeclock';
 
@@ -101,10 +96,7 @@ export default function App() {
             setLoginMessage('');
             if (authUser) {
                 const unsubUser = onSnapshot(doc(db, "users", authUser.uid), (userDoc) => {
-                    // CRITICAL FIX: If the document doesn't exist, it's likely being created.
-                    // We must wait for the listener to fire again when the doc is ready.
                     if (!userDoc.exists()) {
-                        // This prevents signing out a user during the registration race condition.
                         return; 
                     }
 
@@ -181,16 +173,19 @@ export default function App() {
     };
     
     const handleSignOut = () => { setView('dashboard'); signOut(auth); };
-    const handleNavClick = (mainView, sub = '') => { setView(mainView); setSubView(sub); };
-
+    const handleNavClick = (mainView, sub = '') => { 
+        setView(mainView); 
+        setSubView(sub);
+    };
+    
     const handleConfirm = () => {
         if (confirmAction && typeof confirmAction.action === 'function') {
             confirmAction.action();
         }
         setConfirmAction(null);
     };
-    
-     const handleClockInOut = async (data) => {
+
+    const handleClockInOut = async (data) => {
         const { isGuest, userId, pin, name, agency, area, shiftType } = data;
         
         if (!isGuest) {
@@ -246,14 +241,26 @@ export default function App() {
 
     const renderContent = () => {
         switch (view) {
-            case 'admin': return <AdminPortal {...{ currentUser: user, stations, classes, allUsers, setConfirmAction, waivers, branding, onBrandingUpdate: setBranding, onApproveUser: handleApproveUser }} />;
-            case 'trainingHistory': return <TrainingHistory {...{ user, allUsers, classes, stations, checkIns, generateClassPdf }} />;
+            case 'admin': return <AdminPortal {...{ currentUser: user, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser: handleApproveUser }} />;
+            case 'siteBranding': return <div className="p-4 sm:p-6 lg:p-8"><Branding branding={branding} onUpdate={setBranding} /></div>;
+            case 'myTraining': 
+                return <MyTraining {...{ 
+                    user, 
+                    enrolledClassesDetails: classes.filter(c => user.enrolledClasses?.includes(c.id)),
+                    dailyCheckIns,
+                    setActiveClassId,
+                    allUsers, 
+                    classes, 
+                    stations, 
+                    checkIns, 
+                    generateClassPdf 
+                }} />;
             case 'attendance': return <AttendanceTabs {...{ user, allUsers, classes, stations, attendanceRecords, subView, setSubView }} />;
             case 'help': return <HelpTabs {...{ user, stations, classes, addUpdate: () => {}, instructorSignups, supportSignups, subView, setSubView }} />;
             case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: () => {}, enrollmentError, branding }} />;
             case 'profile': return <ProfileManagement {...{ user }} />;
             case 'scheduling': 
-                return hasSchedulingAccess ? <Scheduling user={user} allUsers={allUsers} shifts={shifts} /> : <div>Access Denied</div>;
+                return hasSchedulingAccess ? <Scheduling user={user} allUsers={allUsers} shifts={shifts} timeClockEntries={timeClockEntries} /> : <div>Access Denied</div>;
             case 'dashboard':
             default:
                 return <Dashboard {...{ 
@@ -292,17 +299,16 @@ export default function App() {
                             </div>
                         </div>
                         <div className="flex items-center space-x-4">
+                            {user.isAdmin && <button onClick={() => handleNavClick('siteBranding')} className="text-sm font-medium text-accent hover:text-accent-hover">Site Branding</button>}
                             <button onClick={() => handleNavClick('profile')} className="text-sm font-medium text-accent hover:text-accent-hover">My Profile</button>
                             <button onClick={handleSignOut} className="text-sm font-medium text-accent hover:text-accent-hover">Sign Out</button>
                         </div>
                     </div>
                     <nav className="flex space-x-4 border-t border-gray-200 -mb-px overflow-x-auto">
                         <button onClick={() => handleNavClick('dashboard')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'dashboard' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><LayoutDashboard className="mr-1.5 h-4 w-4" />My Dashboard</button>
-                        {hasSchedulingAccess && <button onClick={() => handleNavClick('scheduling')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'scheduling' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Calendar className="mr-1.5 h-4 w-4" />Scheduling</button>}
-                        {(isInstructor || user.isAdmin) && (<button onClick={() => handleNavClick('attendance', 'checkInOut')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'attendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ClipboardList className="mr-1.5 h-4 w-4" />Training Attendance</button>)}
-                        {((INSTRUCTOR_ROLES.includes(user.role) && user.isApproved) || user.isAdmin || isSupport) && (<button onClick={() => handleNavClick('help', 'teaching')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'help' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Handshake className="mr-1.5 h-4 w-4" />Help us Out!</button>)}
-                        <button onClick={() => handleNavClick('catalog')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'catalog' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Library className="mr-1.5 h-4 w-4" />Course Catalog</button>
-                        <button onClick={() => handleNavClick('trainingHistory')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'trainingHistory' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Clock className="mr-1.5 h-4 w-4" />My Training History</button>
+                        {hasSchedulingAccess && <button onClick={() => handleNavClick('scheduling')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'scheduling' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Calendar className="mr-1.5 h-4 w-4" />My Schedule</button>}
+                        <button onClick={() => handleNavClick('myTraining')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'myTraining' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Library className="mr-1.5 h-4 w-4" />My Training</button>
+                        {isInstructor && (<button onClick={() => handleNavClick('attendance', 'checkInOut')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'attendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ClipboardList className="mr-1.5 h-4 w-4" />Attendance Management</button>)}
                         {user.isAdmin && <button onClick={() => handleNavClick('admin')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'admin' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Shield className="mr-1.5 h-4 w-4" />Admin Portal</button>}
                     </nav>
                 </div>
