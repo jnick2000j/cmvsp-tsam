@@ -1,8 +1,9 @@
+// src/App.js
 import React, { useState, useEffect, useMemo } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot, query, updateDoc, addDoc, getDocs, deleteDoc, where, arrayUnion, arrayRemove, deleteField, orderBy, limit } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
-import { INSTRUCTOR_ROLES, SUPPORT_ROLES, appId } from './constants';
+import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROL_LEADER_ROLES, appId } from './constants';
 
 // Import All Components
 import AuthComponent from './components/AuthComponent';
@@ -19,11 +20,14 @@ import CertificateModal from './components/CertificateModal';
 import ConfirmationModal from './components/ConfirmationModal';
 import PrerequisiteUploadModal from './components/PrerequisiteUploadModal';
 import Dashboard from './components/Dashboard';
-import { generateClassPdf } from './utils/pdfGenerator';
+import Scheduling from './components/Scheduling';
+import TimeClock from './components/TimeClock';
 
-import { LayoutDashboard, ClipboardList, Handshake, Library, Clock, User, Shield, ArrowLeft, AlertTriangle, UserPlus, ThumbsUp } from 'lucide-react';
+import { generateClassPdf } from './utils/pdfGenerator';
+import { LayoutDashboard, ClipboardList, Handshake, Library, Clock, User, Shield, Calendar, BarChart, Smartphone } from 'lucide-react';
 
 export default function App() {
+    // ... (most state variables remain the same)
     const [user, setUser] = useState(null);
     const [isAuthLoading, setIsAuthLoading] = useState(true);
     const [isDataLoading, setIsDataLoading] = useState(true);
@@ -38,6 +42,7 @@ export default function App() {
         accentHover: '#b13710',
     });
     
+    // Existing State
     const [stations, setStations] = useState([]);
     const [classes, setClasses] = useState([]);
     const [waivers, setWaivers] = useState([]);
@@ -47,11 +52,18 @@ export default function App() {
     const [supportSignups, setSupportSignups] = useState([]);
     const [dailyCheckIns, setDailyCheckIns] = useState([]);
     const [checkIns, setCheckIns] = useState([]);
+    const [attendanceRecords, setAttendanceRecords] = useState([]);
+    const [roleRequests, setRoleRequests] = useState([]);
+
+    // Scheduling State
+    const [shifts, setShifts] = useState([]);
+    const [timeClockEntries, setTimeClockEntries] = useState([]);
+    const [timeClocks, setTimeClocks] = useState([]); // New state for time clock devices
+
     const [error, setError] = useState('');
     const [view, setView] = useState('dashboard');
     const [subView, setSubView] = useState('');
     const [activeClassId, setActiveClassId] = useState(null);
-    const [attendanceRecords, setAttendanceRecords] = useState([]);
     const [pendingActionsPage, setPendingActionsPage] = useState(0);
     const [isSkillsModalOpen, setIsSkillsModalOpen] = useState(false);
     const [selectedCheckInForSkills, setSelectedCheckInForSkills] = useState(null);
@@ -65,7 +77,10 @@ export default function App() {
     const [isPrerequisiteModalOpen, setIsPrerequisiteModalOpen] = useState(false);
     const [classForUpload, setClassForUpload] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
-    const [roleRequests, setRoleRequests] = useState([]);
+
+
+    // This is a simple router. In a larger app, you would use a library like react-router-dom
+    const isTimeClockView = window.location.pathname === '/timeclock';
 
     useEffect(() => {
         const brandingRef = doc(db, `artifacts/${appId}/public/data/branding`, 'settings');
@@ -73,7 +88,6 @@ export default function App() {
             if (doc.exists()) {
                 const data = doc.data();
                 setBranding(prev => ({ ...prev, ...data }));
-
                 const root = document.documentElement;
                 root.style.setProperty('--color-primary', data.primary || '#052D39');
                 root.style.setProperty('--color-primary-hover', data.primaryHover || '#b13710');
@@ -84,16 +98,9 @@ export default function App() {
 
         const unsubAuth = onAuthStateChanged(auth, (authUser) => {
             if (authUser) {
-                const userDocRef = doc(db, "users", authUser.uid);
-                
-                const unsubUser = onSnapshot(userDocRef, (doc) => {
-                    if (doc.exists()) {
-                        setUser({ uid: authUser.uid, id: doc.id, ...doc.data() });
-                        setIsAuthLoading(false);
-                    } else {
-                        setUser(null);
-                        setIsAuthLoading(false);
-                    }
+                const unsubUser = onSnapshot(doc(db, "users", authUser.uid), (doc) => {
+                    setUser(doc.exists() ? { uid: authUser.uid, id: doc.id, ...doc.data() } : null);
+                    setIsAuthLoading(false);
                 });
                 return () => unsubUser();
             } else {
@@ -101,15 +108,11 @@ export default function App() {
                 setIsAuthLoading(false);
             }
         });
-
-        return () => {
-            unsubAuth();
-            unsubBranding();
-        };
+        return () => { unsubAuth(); unsubBranding(); };
     }, []);
 
     useEffect(() => {
-        if (isAuthLoading || !user) {
+        if (isAuthLoading || (!user && !isTimeClockView)) {
             setIsDataLoading(false);
             return;
         }
@@ -125,15 +128,13 @@ export default function App() {
             supportSignups: setSupportSignups,
             attendanceRecords: setAttendanceRecords,
             roleRequests: setRoleRequests,
+            shifts: setShifts,
+            timeClockEntries: setTimeClockEntries,
+            timeclocks: setTimeClocks // Fetch time clock devices
         };
 
         const unsubscribers = Object.entries(collectionsToWatch).map(([name, setter]) => {
             let q = query(collection(db, name === 'users' ? 'users' : `artifacts/${appId}/public/data/${name}`));
-            if (name === 'attendanceRecords' || name === 'roleRequests') {
-                q = query(q, orderBy('timestamp', 'desc'));
-            } else if (name === 'updates') {
-                 q = query(q, orderBy('timestamp', 'desc'), limit(10));
-            }
             return onSnapshot(q, (snapshot) => {
                 setter(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             }, (err) => console.error(`Failed to load ${name}:`, err));
@@ -141,27 +142,17 @@ export default function App() {
         
         setIsDataLoading(false);
 
-        return () => {
-            unsubscribers.forEach(unsub => unsub());
-        };
-    }, [user, isAuthLoading]);
+        return () => unsubscribers.forEach(unsub => unsub());
+    }, [user, isAuthLoading, isTimeClockView]);
 
     const myAssignments = useMemo(() => {
         if (!user) return [];
         const assignments = [];
-        stations.forEach(s => {
-            if (user.assignments && user.assignments[s.id]) {
-                assignments.push({ ...s, type: 'station' });
-            }
-        });
-        classes.forEach(c => {
-             if (c.leadInstructorId === user.uid) {
-                 assignments.push({ ...c, type: 'class', id: c.id, name: `${c.name} (Lead)` });
-             }
-        });
+        stations.forEach(s => { if (user.assignments && user.assignments[s.id]) assignments.push({ ...s, type: 'station' }); });
+        classes.forEach(c => { if (c.leadInstructorId === user.uid) assignments.push({ ...c, type: 'class', id: c.id, name: `${c.name} (Lead)` }); });
         return assignments;
     }, [stations, classes, user]);
-    
+
     const handleSignOut = () => { setView('dashboard'); signOut(auth); };
     const handleNavClick = (mainView, sub = '') => { setView(mainView); setSubView(sub); };
 
@@ -171,9 +162,50 @@ export default function App() {
         }
         setConfirmAction(null);
     };
+    
+     const handleClockInOut = async (data) => {
+        const { isGuest, userId, pin, name, agency, area, shiftType } = data;
+        
+        if (!isGuest) {
+            const userToClock = allUsers.find(u => u.id === userId);
+            if (!userToClock || userToClock.timeClockPin !== pin) {
+                alert("Invalid PIN.");
+                return;
+            }
+        }
+        
+        const activeEntryQuery = isGuest 
+            ? query(collection(db, `artifacts/${appId}/public/data/timeClockEntries`), where("name", "==", name), where("agency", "==", agency), where("clockOutTime", "==", null))
+            : query(collection(db, `artifacts/${appId}/public/data/timeClockEntries`), where("userId", "==", userId), where("clockOutTime", "==", null));
 
-    if (isAuthLoading || (user && !user.firstName)) {
+        const activeEntrySnapshot = await getDocs(activeEntryQuery);
+
+        if (activeEntrySnapshot.empty) { // Clocking In
+            await addDoc(collection(db, `artifacts/${appId}/public/data/timeClockEntries`), {
+                isGuest,
+                userId: isGuest ? null : userId,
+                name: isGuest ? name : `${user.firstName} ${user.lastName}`,
+                agency: isGuest ? agency : null,
+                area,
+                shiftType,
+                clockInTime: new Date(),
+                clockOutTime: null,
+            });
+        } else { // Clocking Out
+            const entryDoc = activeEntrySnapshot.docs[0];
+            await updateDoc(doc(db, `artifacts/${appId}/public/data/timeClockEntries`, entryDoc.id), {
+                clockOutTime: new Date()
+            });
+        }
+    };
+
+
+    if (isAuthLoading || ((user && !user.firstName) && !isTimeClockView)) {
         return <div className="flex items-center justify-center h-screen bg-gray-100"><div className="text-xl font-semibold text-gray-600">Loading Application...</div></div>;
+    }
+
+    if (isTimeClockView) {
+        return <TimeClock users={allUsers} onClockIn={handleClockInOut} onClockOut={handleClockInOut} branding={branding} timeClocks={timeClocks} />;
     }
 
     if (!user) {
@@ -182,6 +214,7 @@ export default function App() {
     
     const isInstructor = user.isAdmin || INSTRUCTOR_ROLES.includes(user.role);
     const isSupport = SUPPORT_ROLES.includes(user.role);
+    const isPatrolLeadership = user.isAdmin || PATROL_LEADER_ROLES.includes(user.ability);
 
     const renderContent = () => {
         switch (view) {
@@ -191,9 +224,27 @@ export default function App() {
             case 'help': return <HelpTabs {...{ user, stations, classes, addUpdate: () => {}, instructorSignups, supportSignups, subView, setSubView }} />;
             case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: () => {}, enrollmentError, branding }} />;
             case 'profile': return <ProfileManagement {...{ user }} />;
+            case 'scheduling': return <Scheduling user={user} allUsers={allUsers} shifts={shifts} />;
             case 'dashboard':
             default:
-                return <Dashboard {...{ user, isInstructor, enrolledClassesDetails: classes.filter(c => user.enrolledClasses?.includes(c.id)), dailyCheckIns, setActiveClassId, myAssignments, attendanceRecords, classes, paginatedPendingActions: [], setPendingActionsPage, pendingActionsPage, allPendingActions: [] }} />;
+                return <Dashboard {...{ 
+                    user, 
+                    isInstructor,
+                    isStudent: !isInstructor && !isSupport,
+                    enrolledClassesDetails: classes.filter(c => user.enrolledClasses?.includes(c.id)), 
+                    dailyCheckIns, 
+                    setActiveClassId, 
+                    myAssignments, 
+                    attendanceRecords, 
+                    classes, 
+                    paginatedPendingActions: [], 
+                    setPendingActionsPage, 
+                    pendingActionsPage, 
+                    allPendingActions: [],
+                    timeClockEntries,
+                    allUsers,
+                    isPatrolLeadership
+                }} />;
         }
     };
 
@@ -206,19 +257,22 @@ export default function App() {
                             {branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="h-10" />}
                             <div>
                                 <h1 className="text-2xl font-bold text-gray-900">{branding.mainTitle}</h1>
-                                <p className="text-sm text-gray-500">Welcome, <span className="font-semibold text-accent">{user.firstName} {user.lastName}</span> ({user.role})</p>
+                                <p className="text-sm text-gray-500">Welcome, <span className="font-semibold text-accent">{user.firstName} {user.lastName}</span> ({user.ability || user.role})</p>
                             </div>
                         </div>
-                        <button onClick={handleSignOut} className="text-sm font-medium text-accent hover:text-accent-hover">Sign Out</button>
+                        <div className="flex items-center space-x-4">
+                            <button onClick={() => handleNavClick('profile')} className="text-sm font-medium text-accent hover:text-accent-hover">My Profile</button>
+                            <button onClick={handleSignOut} className="text-sm font-medium text-accent hover:text-accent-hover">Sign Out</button>
+                        </div>
                     </div>
-                    <nav className="flex space-x-4 border-t border-gray-200 -mb-px">
-                        <button onClick={() => handleNavClick('dashboard')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center ${view === 'dashboard' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><LayoutDashboard className="mr-1.5 h-4 w-4" />My Dashboard</button>
-                        {(isInstructor || user.isAdmin) && (<button onClick={() => handleNavClick('attendance', 'checkInOut')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center ${view === 'attendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ClipboardList className="mr-1.5 h-4 w-4" />Attendance</button>)}
-                        {((INSTRUCTOR_ROLES.includes(user.role) && user.isApproved) || user.isAdmin || isSupport) && (<button onClick={() => handleNavClick('help', 'teaching')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center ${view === 'help' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Handshake className="mr-1.5 h-4 w-4" />Help us Out!</button>)}
-                        <button onClick={() => handleNavClick('catalog')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center ${view === 'catalog' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Library className="mr-1.5 h-4 w-4" />Course Catalog</button>
-                        <button onClick={() => handleNavClick('trainingHistory')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center ${view === 'trainingHistory' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Clock className="mr-1.5 h-4 w-4" />My Training History</button>
-                        <button onClick={() => handleNavClick('profile')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center ${view === 'profile' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><User className="mr-1.5 h-4 w-4" />My Profile</button>
-                        {user.isAdmin && <button onClick={() => handleNavClick('admin')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center ${view === 'admin' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Shield className="mr-1.5 h-4 w-4" />Admin Portal</button>}
+                    <nav className="flex space-x-4 border-t border-gray-200 -mb-px overflow-x-auto">
+                        <button onClick={() => handleNavClick('dashboard')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'dashboard' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><LayoutDashboard className="mr-1.5 h-4 w-4" />My Dashboard</button>
+                        <button onClick={() => handleNavClick('scheduling')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'scheduling' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Calendar className="mr-1.5 h-4 w-4" />Scheduling</button>
+                        {(isInstructor || user.isAdmin) && (<button onClick={() => handleNavClick('attendance', 'checkInOut')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'attendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ClipboardList className="mr-1.5 h-4 w-4" />Training Attendance</button>)}
+                        {((INSTRUCTOR_ROLES.includes(user.role) && user.isApproved) || user.isAdmin || isSupport) && (<button onClick={() => handleNavClick('help', 'teaching')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'help' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Handshake className="mr-1.5 h-4 w-4" />Help us Out!</button>)}
+                        <button onClick={() => handleNavClick('catalog')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'catalog' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Library className="mr-1.5 h-4 w-4" />Course Catalog</button>
+                        <button onClick={() => handleNavClick('trainingHistory')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'trainingHistory' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Clock className="mr-1.5 h-4 w-4" />My Training History</button>
+                        {user.isAdmin && <button onClick={() => handleNavClick('admin')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'admin' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Shield className="mr-1.5 h-4 w-4" />Admin Portal</button>}
                     </nav>
                 </div>
             </header>

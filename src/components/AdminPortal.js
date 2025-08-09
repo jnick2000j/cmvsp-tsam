@@ -1,6 +1,6 @@
 // src/components/AdminPortal.js
-import React, { useState, useMemo } from 'react';
-import { doc, deleteDoc, updateDoc, query, where, getDocs, collection, addDoc } from 'firebase/firestore';
+import React, { useState, useMemo, useEffect } from 'react';
+import { doc, deleteDoc, updateDoc, query, where, getDocs, collection, addDoc, setDoc, onSnapshot, orderBy } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { INSTRUCTOR_ROLES, appId } from '../constants';
@@ -9,7 +9,9 @@ import StationEditModal from './StationEditModal';
 import ClassEditModal from './ClassEditModal';
 import WaiverManagement from './WaiverManagement';
 import Branding from './Branding';
-import { Search, UserPlus, UploadCloud, Edit, Trash2, Check, PlusCircle, Layers, BookOpen, UserCog, FileSignature, Mail, Copy, Image as ImageIcon } from 'lucide-react';
+import ShiftManagement from './ShiftManagement';
+import TimeClockManagement from './TimeClockManagement'; // Import new component
+import { Search, UserPlus, UploadCloud, Edit, Trash2, Check, PlusCircle, Layers, BookOpen, UserCog, FileSignature, Mail, Copy, Image as ImageIcon, Calendar, Smartphone } from 'lucide-react';
 import Icon from './Icon';
 
 const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmAction, waivers, branding, onBrandingUpdate }) => {
@@ -23,9 +25,32 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
     const [editingClass, setEditingClass] = useState(null);
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
+    const [shifts, setShifts] = useState([]);
+    const [timeClocks, setTimeClocks] = useState([]); // State for time clocks
+
+    useEffect(() => {
+        // Listener for shifts
+        const shiftsQuery = query(collection(db, `artifacts/${appId}/public/data/shifts`), orderBy("date", "desc"));
+        const unsubscribeShifts = onSnapshot(shiftsQuery, (snapshot) => {
+            setShifts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+
+        // Listener for time clocks
+        const timeClocksQuery = query(collection(db, `artifacts/${appId}/public/data/timeclocks`));
+        const unsubscribeTimeClocks = onSnapshot(timeClocksQuery, (snapshot) => {
+            setTimeClocks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+
+        // Cleanup listeners
+        return () => {
+            unsubscribeShifts();
+            unsubscribeTimeClocks();
+        };
+    }, []);
 
     const instructors = useMemo(() => allUsers.filter(u => INSTRUCTOR_ROLES.includes(u.role) || u.isAdmin), [allUsers]);
 
+    // ... (handleCopyClass, handleCopyStation, handleDeactivateUserClick, handlePasswordReset functions remain the same)
     const handleCopyClass = async (classToCopy) => {
         setMessage('');
         setError('');
@@ -94,6 +119,32 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             }
         });
     };
+    
+    const handleSaveShift = async (shiftData) => {
+        // The onSnapshot listener will automatically update the UI.
+        try {
+            if (shiftData.id) {
+                const shiftRef = doc(db, `artifacts/${appId}/public/data/shifts`, shiftData.id);
+                await setDoc(shiftRef, shiftData, { merge: true });
+            } else {
+                await addDoc(collection(db, `artifacts/${appId}/public/data/shifts`), shiftData);
+            }
+        } catch(err) {
+            console.error("Error saving shift:", err);
+            setError("Failed to save the shift.");
+        }
+    };
+    
+    const handleDeleteShift = async (shiftId) => {
+        // The onSnapshot listener will automatically update the UI.
+         try {
+            await deleteDoc(doc(db, `artifacts/${appId}/public/data/shifts`, shiftId));
+        } catch(err) {
+            console.error("Error deleting shift:", err);
+            setError("Failed to delete the shift.");
+        }
+    };
+
 
     const handleEditUser = (user) => { setEditingUser(user); setIsUserModalOpen(true); };
     const handleCloseUserModal = () => { setIsUserModalOpen(false); setEditingUser(null); };
@@ -146,7 +197,26 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
         });
     };
 
-    const filteredUsers = allUsers.filter(user => `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) || user.email.toLowerCase().includes(searchTerm.toLowerCase()) || user.role.toLowerCase().includes(searchTerm.toLowerCase()));
+    // New handlers for Time Clock devices
+    const handleSaveTimeClock = async (timeClockData) => {
+        try {
+            await addDoc(collection(db, `artifacts/${appId}/public/data/timeclocks`), timeClockData);
+        } catch (err) {
+            setError('Failed to save time clock device.');
+            console.error(err);
+        }
+    };
+
+    const handleDeleteTimeClock = async (timeClockId) => {
+        try {
+            await deleteDoc(doc(db, `artifacts/${appId}/public/data/timeclocks`, timeClockId));
+        } catch (err) {
+            setError('Failed to delete time clock device.');
+            console.error(err);
+        }
+    };
+
+    const filteredUsers = allUsers.filter(user => `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) || user.email.toLowerCase().includes(searchTerm.toLowerCase()) || (user.role && user.role.toLowerCase().includes(searchTerm.toLowerCase())) || (user.ability && user.ability.toLowerCase().includes(searchTerm.toLowerCase())));
 
     return (
         <>
@@ -160,12 +230,14 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         <button onClick={() => setAdminView('classes')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'classes' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Layers className="mr-2" size={18}/> Class Management</button>
                         <button onClick={() => setAdminView('stations')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'stations' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><BookOpen className="mr-2" size={18}/> Station Management</button>
                         <button onClick={() => setAdminView('users')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'users' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserCog className="mr-2" size={18}/> User Management</button>
+                        <button onClick={() => setAdminView('shifts')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'shifts' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Calendar className="mr-2" size={18}/> Shift Management</button>
+                        <button onClick={() => setAdminView('timeclocks')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'timeclocks' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Smartphone className="mr-2" size={18}/> Time Clock Devices</button>
                         <button onClick={() => setAdminView('waivers')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'waivers' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><FileSignature className="mr-2" size={18}/> Waiver Management</button>
                         <button onClick={() => setAdminView('branding')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'branding' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ImageIcon className="mr-2" size={18}/> Branding</button>
                     </nav>
                 </div>
                 
-                {adminView === 'users' && (
+                 {adminView === 'users' && (
                     <>
                         <div className="sm:flex sm:items-center sm:justify-between">
                             <div>
@@ -173,14 +245,13 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                                 <p className="mt-1 text-sm text-gray-500">Add, edit, and manage user roles and assignments.</p>
                             </div>
                             <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none flex space-x-2">
-                                <button className="inline-flex items-center justify-center rounded-md border border-transparent bg-gray-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-700"><UploadCloud className="mr-2 h-5 w-5" />Bulk Import</button>
                                 <button onClick={() => handleEditUser(null)} className="inline-flex items-center justify-center rounded-md border border-transparent bg-primary text-white px-4 py-2 text-sm font-medium shadow-sm hover:bg-primary-hover"><UserPlus className="mr-2 h-5 w-5" />Add User</button>
                             </div>
                         </div>
-                        <div className="mt-6 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} /><input type="text" placeholder="Search users..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-md" /></div>
+                        <div className="mt-6 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} /><input type="text" placeholder="Search users by name, email, or role..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-md" /></div>
                         <div className="mt-6 flow-root"><div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8"><div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8"><div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
-                            <table className="min-w-full divide-y divide-gray-300"><thead className="bg-gray-50"><tr><th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Name</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Role & Status</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Assignments</th><th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th></tr></thead>
-                            <tbody className="divide-y divide-gray-200 bg-white">{filteredUsers.map((user) => (<tr key={user.id}><td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-6"><div className="font-medium text-gray-900">{user.firstName} {user.lastName}</div><div className="text-gray-500">{user.email}</div></td><td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500"><div className="flex items-center gap-2"><span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${user.isAdmin ? 'bg-red-100 text-red-800' : INSTRUCTOR_ROLES.includes(user.role) ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>{user.isAdmin ? 'Admin' : user.role}</span>{INSTRUCTOR_ROLES.includes(user.role) && !user.isApproved && <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800">Pending</span>}</div></td><td className="px-3 py-4 text-sm text-gray-500">{INSTRUCTOR_ROLES.includes(user.role) && (Object.keys(user.assignments || {}).length > 0 ? Object.keys(user.assignments).map(sId => { const station = stations.find(s => s.id === sId); if (!station) return null; const course = classes.find(c => c.id === station.classId); return `${station.name} (${course ? course.name : '...'})`; }).filter(Boolean).join(', ') : <span className="text-gray-400 italic">None</span>)}</td><td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6"><div className="flex items-center justify-end gap-2">{INSTRUCTOR_ROLES.includes(user.role) && !user.isApproved && <button onClick={() => handleApproveInstructor(user.id)} className="text-green-600 hover:text-green-900" title="Approve Instructor"><Check className="h-5 w-5"/></button>}<button onClick={() => handlePasswordReset(user.email, `${user.firstName} ${user.lastName}`)} className="text-blue-600 hover:text-blue-900" title="Send Password Reset"><Mail className="h-5 w-5" /></button><button onClick={() => handleEditUser(user)} className="text-indigo-600 hover:text-indigo-900" title="Edit User"><Edit className="h-5 w-5" /></button><button onClick={() => handleDeactivateUserClick(user.id, `${user.firstName} ${user.lastName}`)} className="text-red-600 hover:text-red-900 disabled:text-gray-300" disabled={user.id === currentUser.uid} title="Delete User Data"><Trash2 className="h-5 w-5" /></button></div></td></tr>))}</tbody></table>
+                            <table className="min-w-full divide-y divide-gray-300"><thead className="bg-gray-50"><tr><th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Name</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Contact</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Patrol Role</th><th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th></tr></thead>
+                            <tbody className="divide-y divide-gray-200 bg-white">{filteredUsers.map((user) => (<tr key={user.id}><td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-6"><div className="font-medium text-gray-900">{user.firstName} {user.lastName}</div><div className="text-gray-500">{user.email}</div></td><td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{user.phone}</td><td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500"><div className="flex items-center gap-2"><span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${user.isAdmin ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`}>{user.isAdmin ? 'Admin' : user.ability || user.role}</span>{INSTRUCTOR_ROLES.includes(user.role) && !user.isApproved && <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800">Training App Unapproved</span>}</div></td><td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6"><div className="flex items-center justify-end gap-2">{INSTRUCTOR_ROLES.includes(user.role) && !user.isApproved && <button onClick={() => handleApproveInstructor(user.id)} className="text-green-600 hover:text-green-900" title="Approve Instructor"><Check className="h-5 w-5"/></button>}<button onClick={() => handlePasswordReset(user.email, `${user.firstName} ${user.lastName}`)} className="text-blue-600 hover:text-blue-900" title="Send Password Reset"><Mail className="h-5 w-5" /></button><button onClick={() => handleEditUser(user)} className="text-indigo-600 hover:text-indigo-900" title="Edit User"><Edit className="h-5 w-5" /></button><button onClick={() => handleDeactivateUserClick(user.id, `${user.firstName} ${user.lastName}`)} className="text-red-600 hover:text-red-900 disabled:text-gray-300" disabled={user.id === currentUser.uid} title="Delete User Data"><Trash2 className="h-5 w-5" /></button></div></td></tr>))}</tbody></table>
                         </div></div></div></div>
                     </>
                 )}
@@ -207,6 +278,8 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         </div>
                     </>
                 )}
+                {adminView === 'shifts' && <ShiftManagement shifts={shifts} users={allUsers} onSave={handleSaveShift} onDelete={handleDeleteShift} />}
+                {adminView === 'timeclocks' && <TimeClockManagement timeClocks={timeClocks} onSave={handleSaveTimeClock} onDelete={handleDeleteTimeClock} />}
                 {adminView === 'waivers' && <WaiverManagement waivers={waivers} setConfirmAction={setConfirmAction} />}
                 {adminView === 'branding' && <Branding branding={branding} onUpdate={onBrandingUpdate} />}
             </div>

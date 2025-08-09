@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { doc, updateDoc, setDoc } from 'firebase/firestore';
 import { db, auth as mainAuth, firebaseConfig } from '../firebaseConfig'; // Import firebaseConfig
-import { INSTRUCTOR_ROLES, SUPPORT_ROLES } from '../constants';
+import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROLS, PATROL_LEADER_ROLES, PATROL_ROLES } from '../constants';
 import { createUserWithEmailAndPassword, getAuth, sendEmailVerification } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 
@@ -14,7 +14,11 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
         if (userToEdit) {
             setFormData({ ...userToEdit, isAffiliated: userToEdit.isAffiliated !== false });
         } else {
-            setFormData({ firstName: '', lastName: '', email: '', phone: '', address: '', city: '', state: '', zip: '', role: 'Student', isAdmin: false, assignments: {}, nspId: '', isAffiliated: true, primaryAgency: '', password: '', confirmPassword: '' });
+            setFormData({ 
+                firstName: '', lastName: '', email: '', phone: '', address: '', city: '', state: '', zip: '', 
+                role: 'Student', isAdmin: false, assignments: {}, nspId: '', isAffiliated: true, primaryAgency: '', 
+                password: '', confirmPassword: '', patrolAssignment: '', ability: '', timeClockPin: '' 
+            });
         }
     }, [userToEdit]);
 
@@ -44,7 +48,6 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
                 const userRef = doc(db, "users", userToEdit.id);
                 await updateDoc(userRef, dataToSave);
             } else {
-                // --- FIX START: Create user without logging out admin ---
                 if (formData.password !== formData.confirmPassword) {
                     setError("Passwords do not match.");
                     return;
@@ -53,17 +56,19 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
                     setError("Password must be at least 6 characters long.");
                     return;
                 }
+                if (formData.timeClockPin && (formData.timeClockPin.length < 4 || !/^\d+$/.test(formData.timeClockPin))) {
+                    setError("Time Clock PIN must be at least 4 digits and contain only numbers.");
+                    return;
+                }
 
-                // 1. Create a temporary, secondary Firebase app instance.
+
                 const tempAppName = `temp-user-creation-${Date.now()}`;
                 const tempApp = initializeApp(firebaseConfig, tempAppName);
                 const tempAuth = getAuth(tempApp);
 
-                // 2. Create the user with the temporary auth instance.
                 const userCredential = await createUserWithEmailAndPassword(tempAuth, formData.email, formData.password);
                 await sendEmailVerification(userCredential.user);
 
-                // 3. Prepare the user profile data for Firestore.
                 const dataToSave = {
                     firstName: formData.firstName,
                     lastName: formData.lastName,
@@ -78,6 +83,9 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
                     nspId: formData.nspId,
                     isAffiliated: formData.isAffiliated,
                     primaryAgency: formData.isAffiliated ? '' : formData.primaryAgency,
+                    patrolAssignment: formData.patrolAssignment,
+                    ability: formData.ability,
+                    timeClockPin: formData.timeClockPin,
                     assignments: {},
                     enrolledClasses: [],
                     completedClasses: {},
@@ -85,10 +93,7 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
                     isApproved: !INSTRUCTOR_ROLES.includes(formData.role),
                 };
                 
-                // 4. Create the user document in Firestore with the new user's UID.
                 await setDoc(doc(db, "users", userCredential.user.uid), dataToSave);
-                // The temporary app instance will be garbage collected.
-                // --- FIX END ---
             }
 
             onSave();
@@ -127,6 +132,35 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
                             <div><label className="block text-sm font-medium text-gray-700">State</label><input name="state" value={formData.state || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                             <div><label className="block text-sm font-medium text-gray-700">Zip Code</label><input name="zip" value={formData.zip || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                         </div>
+                        
+                        <div className="border-t pt-4 space-y-4">
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Patrol Assignment</label>
+                                    <select name="patrolAssignment" value={formData.patrolAssignment || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                                        <option value="">-- Select Patrol --</option>
+                                        {PATROLS.map(p => <option key={p} value={p}>{p}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Ability / Role</label>
+                                    <select name="ability" value={formData.ability || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                                        <option value="">-- Select Ability --</option>
+                                        <optgroup label="Leadership">
+                                            {PATROL_LEADER_ROLES.map(role => <option key={role} value={role}>{role}</option>)}
+                                        </optgroup>
+                                        <optgroup label="Patrollers & Support">
+                                            {PATROL_ROLES.map(role => <option key={role} value={role}>{role}</option>)}
+                                        </optgroup>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Time Clock PIN</label>
+                                <input type="password" name="timeClockPin" value={formData.timeClockPin || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" placeholder="4+ digits"/>
+                            </div>
+                        </div>
+
                          <div className="border-t pt-4 space-y-4">
                               <div><label className="block text-sm font-medium text-gray-700">National Ski Patrol ID #</label><input name="nspId" value={formData.nspId || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                             <div className="flex items-center">
@@ -138,7 +172,7 @@ const UserEditModal = ({ isOpen, onClose, userToEdit, onSave }) => {
                             )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div><label className="block text-sm font-medium text-gray-700">Role</label>
+                            <div><label className="block text-sm font-medium text-gray-700">Training App Role</label>
                                 <select name="role" value={formData.role || 'Student'} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
                                     <option value="Student">Student</option>
                                     <optgroup label="Instructors">

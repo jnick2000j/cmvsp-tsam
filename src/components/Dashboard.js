@@ -1,7 +1,9 @@
 // src/components/Dashboard.js
-import React from 'react';
+import React, { useMemo } from 'react';
 import { LogOut } from 'lucide-react';
-import PendingActions from './PendingActions'; // Assuming PendingActions is also a component
+import PendingActions from './PendingActions'; 
+import { PATROL_LEADER_ROLES } from '../constants';
+
 
 const Dashboard = ({ 
     user, 
@@ -21,14 +23,40 @@ const Dashboard = ({
     handleDenyAction,
     setPendingActionsPage,
     pendingActionsPage,
-    allPendingActions
+    allPendingActions,
+    // New props for consolidated dashboard
+    timeClockEntries,
+    allUsers,
+    isPatrolLeadership
 }) => {
 
     const todayISO = new Date().toISOString().split('T')[0];
+    
+    // Logic from SchedulingDashboard
+    const activeEntries = useMemo(() => timeClockEntries.filter(e => e.clockOutTime === null), [timeClockEntries]);
+
+    const getUserName = (userId) => {
+        const user = allUsers.find(u => u.id === userId);
+        return user ? `${user.firstName} ${user.lastName}` : 'Guest';
+    };
+
+    const roleCounts = useMemo(() => activeEntries.reduce((acc, entry) => {
+        const user = allUsers.find(u => u.id === entry.userId);
+        const role = user ? user.ability : 'Guest Patroller';
+        if(role) acc[role] = (acc[role] || 0) + 1;
+        return acc;
+    }, {}), [activeEntries, allUsers]);
+
+     const areaCounts = useMemo(() => activeEntries.reduce((acc, entry) => {
+        acc[entry.area] = (acc[entry.area] || 0) + 1;
+        return acc;
+    }, {}), [activeEntries]);
+
 
     return (
         <div className="px-4 sm:px-6 lg:px-8 py-8">
             {isStudent ? (
+                // --- STUDENT VIEW (No changes) ---
                 <div className="space-y-12">
                     {enrolledClassesDetails.filter(c => user.enrolledClasses?.includes(c.id)).length > 0 ? (
                         <div>
@@ -69,9 +97,56 @@ const Dashboard = ({
                     )}
                 </div>
             ) : (
-                <div className="lg:col-span-3">
+                // --- INSTRUCTOR/ADMIN/LEADERSHIP VIEW ---
+                <div className="lg:col-span-3 space-y-8">
+                     {isPatrolLeadership && (
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-900 mb-4">Patrol Shift Status</h2>
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                                <div className="bg-white rounded-xl shadow-lg p-5">
+                                    <h3 className="font-bold text-lg text-gray-800 mb-2">Active Roles</h3>
+                                    <ul className="space-y-1 text-sm">
+                                        {Object.entries(roleCounts).map(([role, count]) => (
+                                            <li key={role} className="flex justify-between"><span>{role}:</span><span className="font-semibold">{count}</span></li>
+                                        ))}
+                                    </ul>
+                                </div>
+                                <div className="bg-white rounded-xl shadow-lg p-5">
+                                    <h3 className="font-bold text-lg text-gray-800 mb-2">Area Assignments</h3>
+                                     <ul className="space-y-1 text-sm">
+                                        {Object.entries(areaCounts).map(([area, count]) => (
+                                            <li key={area} className="flex justify-between"><span>{area}:</span><span className="font-semibold">{count}</span></li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </div>
+                             <div className="bg-white rounded-xl shadow-lg p-5">
+                                 <h3 className="font-bold text-lg text-gray-800 mb-4">Active Staff ({activeEntries.length})</h3>
+                                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left font-medium text-gray-500">Name</th>
+                                            <th className="px-3 py-2 text-left font-medium text-gray-500">Area</th>
+                                            <th className="px-3 py-2 text-left font-medium text-gray-500">Clock In Time</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {activeEntries.map(entry => (
+                                            <tr key={entry.id}>
+                                                <td className="px-3 py-2 whitespace-nowrap">{entry.isGuest ? `${entry.name} (Guest)` : getUserName(entry.userId)}</td>
+                                                <td className="px-3 py-2 whitespace-nowrap">{entry.area}</td>
+                                                <td className="px-3 py-2 whitespace-nowrap">{new Date(entry.clockInTime.seconds * 1000).toLocaleTimeString()}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                    
                     {(isInstructor || user.isAdmin) && (
-                        <div className="mb-8">
+                        <div>
+                             <h2 className="text-2xl font-bold text-gray-900 mb-4">Pending Training Actions</h2>
                             <PendingActions
                                 actions={paginatedPendingActions}
                                 onApprove={handleApproveAction}
@@ -84,8 +159,8 @@ const Dashboard = ({
                         </div>
                     )}
                     {myAssignments.length > 0 && (
-                        <div className="mb-8 bg-white rounded-xl shadow-lg p-5">
-                            <h3 className="text-lg font-bold text-gray-800 mb-3">My Assignments</h3>
+                        <div className="bg-white rounded-xl shadow-lg p-5">
+                            <h3 className="text-lg font-bold text-gray-800 mb-3">My Training Assignments</h3>
                             <ul className="space-y-2">
                                 {myAssignments.map(assignment => {
                                     const isActive = attendanceRecords.some(r => r.userId === user.uid && !r.checkOutTime && (r.stationId === assignment.id || r.classId === assignment.id));
