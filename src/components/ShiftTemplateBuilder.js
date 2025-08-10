@@ -3,7 +3,9 @@ import { db, functions } from '../firebaseConfig';
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { PlusCircle, Trash2, Calendar, Save } from 'lucide-react';
-import { PATROL_ROLES } from '../constants'; // Assuming PATROL_ROLES is in your constants
+import { PATROL_ROLES, PATROL_LEADER_ROLES } from '../constants';
+
+const ALL_PATROL_ROLES = [...new Set([...PATROL_ROLES, ...PATROL_LEADER_ROLES])];
 
 // Sub-component for a cleaner UI
 const RecurrenceEditor = ({ recurrence, setRecurrence }) => {
@@ -23,7 +25,6 @@ const RecurrenceEditor = ({ recurrence, setRecurrence }) => {
 
     return (
         <div className="p-4 border rounded-md bg-gray-50 space-y-4">
-            {/* --- NEW: Start and End Date for Recurrence --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label htmlFor="start-date" className="block text-sm font-medium text-gray-700">Start Date</label>
@@ -95,15 +96,12 @@ const RecurrenceEditor = ({ recurrence, setRecurrence }) => {
     );
 };
 
-
 const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
     const [templates, setTemplates] = useState([]);
     const [selectedTemplate, setSelectedTemplate] = useState(null);
     const [templateData, setTemplateData] = useState({});
-    
-    // --- NEW: State for the user assignment UI ---
     const [selectedRoleForAssignment, setSelectedRoleForAssignment] = useState('');
-
+    
     useEffect(() => {
         const fetchTemplates = async () => {
             const templatesCollection = collection(db, 'shiftTemplates');
@@ -129,6 +127,8 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
         setTemplateData({
             name: '',
             patrol: '',
+            startTime: '',
+            stopTime: '',
             roles: [{ name: '', target: 1 }],
             assignments: {},
             recurrence: { type: 'weekly', interval: 1, days: [], startDate: '', endDate: '' }
@@ -158,15 +158,18 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
         setTemplateData(prev => ({ ...prev, roles: newRoles }));
     };
 
-    // --- NEW: Logic for assigning users to roles ---
+    // UPDATED: Users are now filtered by the selected patrol in addition to their role
     const eligibleUsersForAssignment = useMemo(() => {
-        if (!selectedRoleForAssignment) return [];
-        return allUsers.filter(user => user.ability === selectedRoleForAssignment);
-    }, [selectedRoleForAssignment, allUsers]);
+        if (!selectedRoleForAssignment || !templateData.patrol) return [];
+        return allUsers.filter(user =>
+            user.ability === selectedRoleForAssignment &&
+            user.assignments &&
+            user.assignments[templateData.patrol]
+        );
+    }, [selectedRoleForAssignment, templateData.patrol, allUsers]);
 
     const handleAddAssignment = (userId) => {
         if (!userId || !selectedRoleForAssignment) return;
-
         setTemplateData(prev => {
             const newAssignments = { ...(prev.assignments || {}) };
             const currentAssigned = newAssignments[selectedRoleForAssignment] || [];
@@ -212,7 +215,6 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
             alert("Please select a saved template to apply.");
             return;
         }
-        // UPDATED: Use start and end dates from the template's recurrence data
         if (!templateData.recurrence?.startDate || !templateData.recurrence?.endDate) {
             alert("Please set a Start Date and an End Date in the recurrence section.");
             return;
@@ -260,11 +262,29 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
                             </select>
                         </div>
                         
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Default Start Time</label>
+                                <input type="time" name="startTime" value={templateData.startTime || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Default Stop Time</label>
+                                <input type="time" name="stopTime" value={templateData.stopTime || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
+                            </div>
+                        </div>
+
                         <div>
                             <h3 className="text-lg font-semibold">Roles & Staffing Targets</h3>
                             {templateData.roles?.map((role, index) => (
                                 <div key={index} className="flex items-center space-x-2 mt-2">
-                                    <input value={role.name} onChange={e => handleRoleChange(index, 'name', e.target.value)} placeholder="Role Name" className="p-2 border rounded-md flex-grow" />
+                                    <select 
+                                        value={role.name} 
+                                        onChange={e => handleRoleChange(index, 'name', e.target.value)} 
+                                        className="p-2 border rounded-md flex-grow"
+                                    >
+                                        <option value="">Select a Role...</option>
+                                        {ALL_PATROL_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                                    </select>
                                     <input type="number" min="1" value={role.target} onChange={e => handleRoleChange(index, 'target', parseInt(e.target.value, 10))} placeholder="Target #" className="w-24 p-2 border rounded-md" />
                                     <button type="button" onClick={() => removeRole(index)} className="p-2 text-red-500 hover:text-red-700"><Trash2 size={18} /></button>
                                 </div>
@@ -272,7 +292,6 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
                             <button onClick={addRole} className="mt-2 flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-800"><PlusCircle size={16} /><span>Add Role</span></button>
                         </div>
 
-                        {/* --- NEW: User Assignment Section --- */}
                         <div className="border-t pt-6">
                             <h3 className="text-lg font-semibold text-gray-800 mb-4">Assign Specific Staff to Template</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
@@ -280,12 +299,12 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
                                     <label htmlFor="role-assign" className="block text-sm font-medium text-gray-700">Role</label>
                                     <select id="role-assign" value={selectedRoleForAssignment} onChange={e => setSelectedRoleForAssignment(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
                                         <option value="">Select a Role to Assign</option>
-                                        {PATROL_ROLES.map(role => <option key={role} value={role}>{role}</option>)}
+                                        {ALL_PATROL_ROLES.map(role => <option key={role} value={role}>{role}</option>)}
                                     </select>
                                 </div>
                                 <div>
                                     <label htmlFor="user-assign" className="block text-sm font-medium text-gray-700">User</label>
-                                    <select id="user-assign" onChange={e => handleAddAssignment(e.target.value)} disabled={!selectedRoleForAssignment} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value="">
+                                    <select id="user-assign" onChange={e => handleAddAssignment(e.target.value)} disabled={!selectedRoleForAssignment || !templateData.patrol} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value="">
                                         <option value="">Select a User...</option>
                                         {eligibleUsersForAssignment.map(user => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}
                                     </select>

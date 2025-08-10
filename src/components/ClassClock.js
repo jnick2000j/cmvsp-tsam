@@ -1,211 +1,177 @@
 import React, { useState, useMemo } from 'react';
-import { Clock, ArrowLeft } from 'lucide-react';
+import { db } from '../firebaseConfig';
+import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { Clock, LogIn, LogOut, Briefcase, ChevronRight } from 'lucide-react';
 
-const PinPad = ({ onPinSubmit, onPinChange, pin, disabled }) => {
-    const buttons = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
-
-    const handleButtonClick = (value) => {
-        if (disabled) return;
-        if (value === '⌫') {
-            onPinChange(pin.slice(0, -1));
-        } else if (pin.length < 4) {
-            onPinChange(pin + value);
-        }
-    };
-
-    return (
-        <div className={`w-full max-w-xs mx-auto ${disabled ? 'opacity-50' : ''}`}>
-            <div className="grid grid-cols-3 gap-2">
-                {buttons.map((btn, i) => (
-                    <button
-                        key={i}
-                        type="button"
-                        onClick={() => handleButtonClick(btn)}
-                        disabled={!btn || disabled}
-                        className={`h-16 text-2xl font-semibold rounded-lg transition-colors ${
-                            btn ? 'bg-gray-200 hover:bg-gray-300' : 'bg-transparent'
-                        }`}
-                    >
-                        {btn}
-                    </button>
-                ))}
-            </div>
-            <button
-                type="button"
-                onClick={() => onPinSubmit(pin)}
-                disabled={disabled || pin.length !== 4}
-                className="w-full mt-4 h-14 bg-green-500 text-white text-lg font-bold rounded-lg hover:bg-green-600 disabled:bg-gray-400"
-            >
-                Submit
-            </button>
-        </div>
-    );
-};
-
-
-const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckIn, handleClassCheckOut, branding }) => {
-    const [selectedCourse, setSelectedCourse] = useState(null);
-    const [selectedStation, setSelectedStation] = useState(null);
+const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckIn, handleClassCheckOut, branding, timeClocks }) => {
     const [selectedUser, setSelectedUser] = useState(null);
     const [pin, setPin] = useState('');
+    const [message, setMessage] = useState('');
+    const [view, setView] = useState('login'); // login, options, station_checkin
+    const [selectedClass, setSelectedClass] = useState(null);
 
-    const activeStations = useMemo(() => {
-        if (!selectedCourse) return [];
-        return stations.filter(s => s.classId === selectedCourse.id);
-    }, [selectedCourse, stations]);
-    
-    const attendees = useMemo(() => {
-        if (!selectedCourse) return [];
-        const enrolledUserIds = new Set(
-            users.filter(u => u.enrolledClasses?.includes(selectedCourse.id)).map(u => u.id)
-        );
-        const instructorIds = new Set(selectedCourse.leadInstructorIds || []);
-        
-        return users.filter(u => enrolledUserIds.has(u.id) || instructorIds.has(u.id))
-            .map(u => ({...u, isInstructor: instructorIds.has(u.id)}));
+    const todayISO = new Date().toISOString().split('T')[0];
 
-    }, [selectedCourse, users]);
-    
-    const handlePinSubmit = (submittedPin) => {
-        if (!selectedUser) {
-            alert("Please select your name first.");
-            setPin('');
+    // Find the user's current check-in status
+    const currentUserCheckIn = useMemo(() => {
+        if (!selectedUser) return null;
+        return dailyCheckIns.find(ci => ci.userId === selectedUser.id && ci.checkInDate === todayISO && !ci.checkOutTime);
+    }, [selectedUser, dailyCheckIns, todayISO]);
+
+    const handleLogin = () => {
+        if (!selectedUser || !pin) {
+            setMessage("Please select your name and enter your PIN.");
             return;
         }
-
-        if (selectedUser.pin !== submittedPin) {
-            alert("Invalid PIN. Please try again.");
-            setPin('');
+        if (selectedUser.pin !== pin) {
+            setMessage("Invalid PIN. Please try again.");
             return;
         }
+        setMessage('');
+        setView('options');
+    };
 
-        const activeCheckIn = dailyCheckIns.find(ci => ci.userId === selectedUser.uid && ci.stationId === selectedStation.id && !ci.checkOutTime);
+    const handleClassClockIn = async (classId) => {
+        const course = classes.find(c => c.id === classId);
+        await handleClassCheckIn(selectedUser, course, null); // Assuming station is null for class check-in
+        setMessage(`You have successfully clocked into ${course.name}. Would you like to check into a station?`);
+        // This is a simplified confirmation. A more robust solution might use a different view state.
+    };
 
-        if (activeCheckIn) {
-            handleClassCheckOut(activeCheckIn.id);
-            alert(`${selectedUser.firstName} checked out successfully from ${selectedStation.name}.`);
-        } else {
-            handleClassCheckIn(selectedUser, selectedCourse, selectedStation);
-            alert(`${selectedUser.firstName} checked in successfully to ${selectedStation.name}.`);
-        }
+    const handleStationCheckIn = async (stationId) => {
+        const station = stations.find(s => s.id === stationId);
+        const course = classes.find(c => c.id === station.classId);
+        await handleClassCheckIn(selectedUser, course, station);
+        reset();
+        alert(`Successfully checked into station: ${station.name}`);
+    };
 
-        // Reset for the next person
+    const handleStationCheckOut = async () => {
+        await handleClassCheckOut(currentUserCheckIn.id);
+        reset();
+        alert("Successfully checked out of the station.");
+    };
+
+    const handleClassCheckOutAction = async () => {
+        await handleClassCheckOut(currentUserCheckIn.id);
+        reset();
+        alert("Successfully checked out of the class.");
+    };
+
+    const reset = () => {
         setSelectedUser(null);
         setPin('');
-    };
-    
-    const handleUserSelect = (userId) => {
-        const user = users.find(u => u.id === userId);
-        setSelectedUser(user);
-        setPin(''); // Clear pin when a new user is selected
+        setMessage('');
+        setView('login');
+        setSelectedClass(null);
     };
 
-    // --- Main Rendering Logic ---
+    const renderLogin = () => (
+        <div className="w-full max-w-md">
+            <h2 className="text-2xl font-bold text-center mb-2">Class Clock-In</h2>
+            <p className="text-center text-gray-600 mb-6">Select your name and enter your PIN to begin.</p>
+            <div className="space-y-4">
+                <select onChange={(e) => setSelectedUser(users.find(u => u.id === e.target.value))} className="w-full p-3 border rounded-md">
+                    <option>Select your name...</option>
+                    {users.map(user => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}
+                </select>
+                <input type="password" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="Enter your PIN" className="w-full p-3 border rounded-md" />
+                <button onClick={handleLogin} className="w-full p-3 bg-accent text-white rounded-md font-semibold hover:bg-accent-hover">
+                    Continue
+                </button>
+                {message && <p className="text-red-500 text-center mt-4">{message}</p>}
+            </div>
+        </div>
+    );
 
-    // Step 1: Course Selection (Original Logic)
-    if (!selectedCourse) {
-        return (
-            <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-                <div className="w-full max-w-lg text-center">
-                    {branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="mx-auto h-24 mb-6" />}
-                    <h1 className="text-3xl font-bold text-gray-800 mb-6">Select Your Course</h1>
+    const renderOptions = () => {
+        if (!currentUserCheckIn) {
+            // User is not clocked into any class today
+            const enrolledClasses = classes.filter(c => selectedUser.enrolledClasses?.includes(c.id));
+            return (
+                <div className="w-full max-w-lg">
+                    <h2 className="text-2xl font-bold mb-4">Welcome, {selectedUser.firstName}</h2>
+                    <p className="mb-6">Please clock into your class for today.</p>
                     <div className="space-y-3">
-                        {classes.filter(c => !c.isCompleted).map(course => (
-                            <button
-                                key={course.id}
-                                onClick={() => setSelectedCourse(course)}
-                                className="w-full text-left p-4 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow"
-                            >
-                                <p className="text-lg font-semibold text-gray-900">{course.name}</p>
-                                <p className="text-sm text-gray-500">{course.startDate}</p>
+                        {enrolledClasses.map(course => (
+                            <button key={course.id} onClick={() => handleClassClockIn(course.id)} className="w-full text-left p-4 bg-white rounded-lg shadow hover:bg-gray-50 flex justify-between items-center">
+                                <div>
+                                    <p className="font-semibold">{course.name}</p>
+                                    <p className="text-sm text-gray-500">{course.startDate}</p>
+                                </div>
+                                <LogIn className="h-5 w-5 text-green-500" />
                             </button>
                         ))}
                     </div>
+                     <button onClick={reset} className="mt-6 text-sm text-gray-600 hover:underline">Not {selectedUser.firstName}? Log out.</button>
                 </div>
+            );
+        }
+
+        if (currentUserCheckIn && !currentUserCheckIn.stationId) {
+            // User is clocked into a class, but not a station
+            return (
+                <div className="w-full max-w-lg text-center">
+                    <h2 className="text-2xl font-bold mb-2">You are clocked into {classes.find(c => c.id === currentUserCheckIn.classId)?.name}.</h2>
+                    <p className="text-gray-600 mb-6">What would you like to do?</p>
+                    <div className="space-y-4">
+                        <button onClick={() => setView('station_checkin')} className="w-full p-4 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 flex items-center justify-center">
+                            <Briefcase className="mr-2 h-5 w-5" /> Check Into a Station
+                        </button>
+                        <button onClick={handleClassCheckOutAction} className="w-full p-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 flex items-center justify-center">
+                            <LogOut className="mr-2 h-5 w-5" /> Check Out of Class
+                        </button>
+                    </div>
+                     <button onClick={reset} className="mt-8 text-sm text-gray-600 hover:underline">Done</button>
+                </div>
+            );
+        }
+
+        if (currentUserCheckIn && currentUserCheckIn.stationId) {
+            // User is clocked into a class AND a station
+            const currentStation = stations.find(s => s.id === currentUserCheckIn.stationId);
+            return (
+                 <div className="w-full max-w-lg text-center">
+                    <h2 className="text-2xl font-bold mb-2">You are checked into {currentStation.name}.</h2>
+                    <p className="text-gray-600 mb-6">What would you like to do?</p>
+                    <div className="space-y-4">
+                         <button onClick={handleStationCheckOut} className="w-full p-4 bg-yellow-500 text-white rounded-lg font-semibold hover:bg-yellow-600 flex items-center justify-center">
+                            <LogOut className="mr-2 h-5 w-5" /> Check Out of Station
+                        </button>
+                        <button onClick={handleClassCheckOutAction} className="w-full p-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 flex items-center justify-center">
+                            <LogOut className="mr-2 h-5 w-5" /> Check Out of Class
+                        </button>
+                    </div>
+                     <button onClick={reset} className="mt-8 text-sm text-gray-600 hover:underline">Done</button>
+                </div>
+            );
+        }
+    };
+    
+    const renderStationCheckIn = () => {
+        const availableStations = stations.filter(s => s.classId === currentUserCheckIn.classId);
+        return (
+             <div className="w-full max-w-lg">
+                <h2 className="text-2xl font-bold mb-4">Select a Station</h2>
+                <div className="space-y-3">
+                    {availableStations.map(station => (
+                        <button key={station.id} onClick={() => handleStationCheckIn(station.id)} className="w-full text-left p-4 bg-white rounded-lg shadow hover:bg-gray-50 flex justify-between items-center">
+                            <p className="font-semibold">{station.name}</p>
+                            <ChevronRight className="h-5 w-5 text-gray-400" />
+                        </button>
+                    ))}
+                </div>
+                <button onClick={() => setView('options')} className="mt-6 text-sm text-gray-600 hover:underline">Back to options</button>
             </div>
         );
-    }
-    
-    // Step 2: Station Selection (Original Logic)
-    if (!selectedStation) {
-         return (
-            <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-                 <div className="w-full max-w-lg text-center">
-                    <button onClick={() => setSelectedCourse(null)} className="absolute top-6 left-6 flex items-center text-sm text-gray-600 hover:text-gray-900">
-                        <ArrowLeft size={16} className="mr-1" /> Back to Courses
-                    </button>
-                    {branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="mx-auto h-24 mb-2" />}
-                    <h1 className="text-3xl font-bold text-gray-800 mb-2">Select Your Station</h1>
-                    <p className="text-md text-gray-600 mb-6">Course: {selectedCourse.name}</p>
-                     <div className="space-y-3">
-                         {activeStations.map(station => (
-                             <button
-                                 key={station.id}
-                                 onClick={() => setSelectedStation(station)}
-                                 className="w-full text-left p-4 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow"
-                            >
-                                <p className="text-lg font-semibold text-gray-900">{station.name}</p>
-                             </button>
-                         ))}
-                    </div>
-                 </div>
-            </div>
-         );
-    }
+    };
 
-    // Step 3: COMBINED User Selection + Pin Pad View
     return (
-        <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 sm:p-8">
-                <div className="flex items-center mb-6">
-                    <button onClick={() => setSelectedStation(null)} className="p-2 rounded-full hover:bg-gray-100">
-                        <ArrowLeft size={20} className="text-gray-600" />
-                    </button>
-                    <div className="ml-4 text-left">
-                        <h1 className="text-2xl font-bold text-gray-800">{selectedStation.name}</h1>
-                        <p className="text-sm text-gray-500">{selectedCourse.name}</p>
-                    </div>
-                </div>
-
-                {/* Name Selection (from original code) */}
-                <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">1. Select Your Name</label>
-                    <select
-                        value={selectedUser?.id || ''}
-                        onChange={(e) => handleUserSelect(e.target.value)}
-                        className="w-full p-3 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                        <option value="">-- Please select your name --</option>
-                        {attendees.map(attendee => (
-                            <option key={attendee.id} value={attendee.id}>
-                                {attendee.firstName} {attendee.lastName} {attendee.isInstructor && '(Instructor)'}
-                            </option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Pin Input and Pad */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        2. Enter Your 4-Digit PIN {selectedUser && `for ${selectedUser.firstName}`}
-                    </label>
-                    <div className="w-full max-w-xs mx-auto text-center mb-4">
-                        <input
-                            type="password"
-                            readOnly
-                            value={pin}
-                            className="w-48 tracking-[1em] text-center text-3xl bg-gray-100 border-2 rounded-lg p-2"
-                            placeholder="● ● ● ●"
-                        />
-                    </div>
-                    <PinPad 
-                        pin={pin} 
-                        onPinChange={setPin} 
-                        onPinSubmit={handlePinSubmit} 
-                        disabled={!selectedUser} 
-                    />
-                </div>
-            </div>
+        <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4" style={{'--accent': branding.accent, '--accent-hover': branding.accentHover}}>
+            {branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="h-16 mb-8" />}
+            {view === 'login' && renderLogin()}
+            {view === 'options' && renderOptions()}
+            {view === 'station_checkin' && renderStationCheckIn()}
         </div>
     );
 };
