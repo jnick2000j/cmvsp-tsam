@@ -1,5 +1,4 @@
-// src/App.js
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot, query, updateDoc, addDoc, getDocs, where, serverTimestamp, arrayRemove, arrayUnion } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
@@ -15,7 +14,8 @@ import ProfileManagement from './components/ProfileManagement';
 import CertificateModal from './components/CertificateModal';
 import ConfirmationModal from './components/ConfirmationModal';
 import Dashboard from './components/Dashboard';
-import Scheduling from './components/Scheduling';
+// MODIFICATION: Import the new parent ShiftManagement component
+import ShiftManagement from './components/ShiftManagement';
 import TimeClock from './components/TimeClock';
 import MyTraining from './components/MyTraining';
 import Branding from './components/Branding';
@@ -312,8 +312,17 @@ export default function App() {
             case 'attendance': return <AttendanceTabs {...{ user, allUsers, classes, stations, attendanceRecords, subView, setSubView }} />;
             case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: handleEnroll, enrollmentError, branding }} />;
             case 'profile': return <ProfileManagement {...{ user, setConfirmAction }} />;
+            // --- MODIFICATION: This case now renders the new ShiftManagement component ---
             case 'scheduling': 
-                return hasSchedulingAccess ? <Scheduling user={user} allUsers={allUsers} shifts={shifts} timeClockEntries={timeClockEntries} /> : <div>Access Denied</div>;
+                return hasSchedulingAccess 
+                    ? <ShiftManagement 
+                        currentUser={user} 
+                        allUsers={allUsers} 
+                        shifts={shifts} 
+                        // Assuming 'patrols' comes from one of your collections, if not it needs to be fetched
+                        patrols={stations.filter(s => s.type === 'patrol')} // Example: deriving patrols from stations
+                      /> 
+                    : <div>Access Denied</div>;
             case 'dashboard':
             default:
                 return <Dashboard {...{ 
