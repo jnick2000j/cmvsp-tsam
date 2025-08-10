@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../firebaseConfig';
-import { collection, addDoc, doc, setDoc, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc, getDocs, updateDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { PlusCircle, Trash2, Save, Edit, X, Clock, CheckCircle } from 'lucide-react';
 import { PATROL_ROLES, PATROL_LEADER_ROLES, appId, PATROLS, MOUNTAIN_AREAS } from '../constants';
 
@@ -901,7 +901,7 @@ const ShiftCreator = ({ allUsers }) => {
                 )}
                 
                 {activeTab === 'templates' && (
-                    <TemplateManager templates={shiftTemplates} setTemplates={setShiftTemplates} allUsers={allUsers} />
+                    <TemplateManager templates={shiftTemplates} setTemplates={setTemplates} allUsers={allUsers} />
                 )}
 
                 {activeTab === 'scheduled' && (
