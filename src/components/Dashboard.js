@@ -25,11 +25,16 @@ const Dashboard = ({
     isPatrolLeadership,
     usersForApproval,
     onApproveUser,
-    // --- Updated props for multi-step shift trading ---
+    // --- Props for multi-step shift trading ---
     shiftTradeRequests,
     onApproveShiftTrade,      // Final leadership approval
     onUserApproveShiftTrade,  // Second user's approval
-    onDenyShiftTrade,         // Deny/cancel handler
+    onDenyShiftTrade,         // Deny/cancel handler for trades
+    // --- NEW: Props for shift coverage ---
+    shiftCoverageRequests,
+    onApproveShiftCoverage,   // Final leadership approval for coverage
+    onUserApproveShiftCoverage, // Covering user's approval
+    onDenyShiftCoverage       // Deny/cancel handler for coverage
 }) => {
 
     const todayISO = new Date().toISOString().split('T')[0];
@@ -53,7 +58,7 @@ const Dashboard = ({
         return acc;
     }, {}), [activeEntries]);
     
-    // --- NEW: Filter requests based on who needs to act ---
+    // --- Filter logic for shift trades ---
     const requestsForMyApproval = useMemo(() => {
         if (!user || !shiftTradeRequests) return [];
         return shiftTradeRequests.filter(req => req.status === 'pending_user_approval' && req.requestedUserId === user.uid);
@@ -63,6 +68,17 @@ const Dashboard = ({
         if (!shiftTradeRequests) return [];
         return shiftTradeRequests.filter(req => req.status === 'pending_leader_approval');
     }, [shiftTradeRequests]);
+
+    // --- NEW: Filter logic for shift coverage ---
+    const coverageRequestsForMyApproval = useMemo(() => {
+        if (!user || !shiftCoverageRequests) return [];
+        return shiftCoverageRequests.filter(req => req.status === 'pending_user_approval' && req.coveringUserId === user.uid);
+    }, [shiftCoverageRequests, user]);
+
+    const coverageRequestsForLeaderApproval = useMemo(() => {
+        if (!shiftCoverageRequests) return [];
+        return shiftCoverageRequests.filter(req => req.status === 'pending_leader_approval');
+    }, [shiftCoverageRequests]);
 
 
     return (
@@ -155,11 +171,11 @@ const Dashboard = ({
                     )}
 
                     {/* --- PENDING ACTIONS SECTION (ADMIN/LEADERSHIP/USER) --- */}
-                    {(user.isAdmin || isPatrolLeadership || requestsForMyApproval.length > 0) && (
+                    {(user.isAdmin || isPatrolLeadership || requestsForMyApproval.length > 0 || coverageRequestsForMyApproval.length > 0) && (
                          <div>
                             <h2 className="text-2xl font-bold text-gray-900 mb-4">Pending Actions</h2>
                             
-                            {/* NEW: Section for trades waiting on the current user */}
+                            {/* Section for trades waiting on the current user */}
                             {requestsForMyApproval.length > 0 && (
                                 <div className="bg-white rounded-xl shadow-lg p-5 mb-8">
                                     <h3 className="text-lg font-bold text-gray-800 mb-3">Shift Trades Awaiting Your Approval</h3>
@@ -196,6 +212,41 @@ const Dashboard = ({
                                     </ul>
                                 </div>
                             )}
+                            
+                            {/* NEW: Section for coverage requests waiting on the current user */}
+                            {coverageRequestsForMyApproval.length > 0 && (
+                                <div className="bg-white rounded-xl shadow-lg p-5 mb-8">
+                                    <h3 className="text-lg font-bold text-gray-800 mb-3">Shift Coverage Awaiting Your Approval</h3>
+                                    <ul className="divide-y divide-gray-200">
+                                        {coverageRequestsForMyApproval.map(request => (
+                                            <li key={request.id} className="py-4 flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-900">
+                                                        <span className="font-bold">{request.requesterName}</span> has requested you to cover their shift.
+                                                    </p>
+                                                     <p className="text-sm text-gray-500 mt-1">
+                                                        Shift Details: <span className="text-gray-700">{request.shiftInfo}</span>
+                                                    </p>
+                                                </div>
+                                                <div className="flex space-x-2">
+                                                    <button
+                                                        onClick={() => onUserApproveShiftCoverage(request)}
+                                                        className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700"
+                                                    >
+                                                        <CheckCircle className="h-4 w-4 mr-1.5"/> Approve
+                                                    </button>
+                                                     <button
+                                                        onClick={() => onDenyShiftCoverage(request)}
+                                                        className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700"
+                                                    >
+                                                        <XCircle className="h-4 w-4 mr-1.5"/> Deny
+                                                    </button>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
 
                             {/* User Approvals (Admin only) */}
                             {user.isAdmin && usersForApproval.length > 0 && (
@@ -217,7 +268,7 @@ const Dashboard = ({
                                 </div>
                             )}
 
-                            {/* MODIFIED: Shift Trade Approvals (Now for Leadership only) */}
+                            {/* Shift Trade Approvals (Leadership only) */}
                             {isPatrolLeadership && requestsForLeaderApproval.length > 0 && (
                                 <div className="bg-white rounded-xl shadow-lg p-5 mb-8">
                                     <h3 className="text-lg font-bold text-gray-800 mb-3">Shift Trades Awaiting Final Approval</h3>
@@ -239,6 +290,42 @@ const Dashboard = ({
                                                     </button>
                                                      <button
                                                         onClick={() => onDenyShiftTrade(request)}
+                                                        className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700"
+                                                    >
+                                                        <XCircle className="h-4 w-4 mr-1.5"/> Deny
+                                                    </button>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {/* NEW: Shift Coverage Approvals (Leadership only) */}
+                            {isPatrolLeadership && coverageRequestsForLeaderApproval.length > 0 && (
+                                <div className="bg-white rounded-xl shadow-lg p-5 mb-8">
+                                    <h3 className="text-lg font-bold text-gray-800 mb-3">Shift Coverage Awaiting Final Approval</h3>
+                                    <ul className="divide-y divide-gray-200">
+                                        {coverageRequestsForLeaderApproval.map(request => (
+                                            <li key={request.id} className="py-4 flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-900">
+                                                        <span className="font-bold">{request.coveringUserName}</span> to cover for <span className="font-bold">{request.requesterName}</span>
+                                                    </p>
+                                                    <p className="text-sm text-gray-500 mt-1">
+                                                        Shift: <span className="text-gray-700">{request.shiftInfo}</span>
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-1">Covering user has approved.</p>
+                                                </div>
+                                                <div className="flex space-x-2">
+                                                    <button
+                                                        onClick={() => onApproveShiftCoverage(request)}
+                                                        className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700"
+                                                    >
+                                                        <CheckCircle className="h-4 w-4 mr-1.5"/> Finalize
+                                                    </button>
+                                                     <button
+                                                        onClick={() => onDenyShiftCoverage(request)}
                                                         className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700"
                                                     >
                                                         <XCircle className="h-4 w-4 mr-1.5"/> Deny
