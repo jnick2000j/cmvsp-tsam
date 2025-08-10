@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../firebaseConfig';
 import { collection, addDoc, doc, setDoc, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
-import { PlusCircle, Trash2, Save, Edit, X } from 'lucide-react';
-import { PATROL_ROLES, PATROL_LEADER_ROLES, appId, PATROLS } from '../constants';
+import { PlusCircle, Trash2, Save, Edit, X, Clock, CheckCircle } from 'lucide-react';
+import { PATROL_ROLES, PATROL_LEADER_ROLES, appId, PATROLS, MOUNTAIN_AREAS } from '../constants';
 
 const ALL_PATROL_ROLES = [...new Set([...PATROL_ROLES, ...PATROL_LEADER_ROLES])];
 
@@ -484,17 +484,125 @@ const ShiftEditor = ({ shift, onSave, onCancel, allUsers }) => {
     );
 };
 
+// MODIFICATION: New component for patrol attendance
+const PatrolAttendance = ({ allUsers }) => {
+    const [selectedPatrol, setSelectedPatrol] = useState('');
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const [shift, setShift] = useState(null);
+    const [shiftTrades, setShiftTrades] = useState([]);
+
+    useEffect(() => {
+        const fetchShiftData = async () => {
+            if (selectedPatrol && selectedDate) {
+                const shiftId = `${selectedPatrol}-${selectedDate}`;
+                const shiftRef = doc(db, `artifacts/${appId}/public/data/shifts`, shiftId);
+                const shiftSnap = await getDocs(shiftRef);
+                if (shiftSnap.exists()) {
+                    setShift({ id: shiftSnap.id, ...shiftSnap.data() });
+                } else {
+                    setShift(null);
+                }
+
+                // Fetch shift trades for this shift
+                const tradesRef = collection(db, `artifacts/${appId}/public/data/shiftTrades`);
+                const q = query(tradesRef, where("shiftId", "==", shiftId), where("status", "==", "pending"));
+                const tradesSnapshot = await getDocs(q);
+                setShiftTrades(tradesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            }
+        };
+        fetchShiftData();
+    }, [selectedPatrol, selectedDate]);
+
+    const handleClockInOut = async (userId, type) => {
+        // This would interact with a timekeeping collection in Firestore
+        alert(`${type} for user ${userId} at ${new Date().toLocaleTimeString()}`);
+    };
+
+    const handleApproveTrade = async (tradeId) => {
+        const tradeRef = doc(db, `artifacts/${appId}/public/data/shiftTrades`, tradeId);
+        await updateDoc(tradeRef, { status: "approved" });
+        setShiftTrades(shiftTrades.filter(t => t.id !== tradeId));
+        alert("Trade approved!");
+    };
+    
+    return (
+        <div>
+            <h2 className="text-xl font-bold mb-4">Patrol Attendance</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <select value={selectedPatrol} onChange={e => setSelectedPatrol(e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm">
+                    <option value="">-- Select Patrol --</option>
+                    {PATROLS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm" />
+            </div>
+
+            {shift ? (
+                <div>
+                    {/* Staffing Info and other components would go here */}
+                    <h3 className="text-lg font-semibold">Staffing</h3>
+                     {shift.roles.map((role, index) => {
+                        const assignedCount = shift.assignments.filter(a => a.role === role.name).length;
+                        return (
+                            <div key={index} className="flex justify-between items-center mt-1">
+                                <span>{role.name}</span>
+                                <span className={`${assignedCount < role.target ? 'text-red-500' : 'text-green-500'}`}>
+                                    {assignedCount} / {role.target}
+                                </span>
+                            </div>
+                        );
+                    })}
+
+                    <h3 className="text-lg font-semibold mt-4">Pending Trades</h3>
+                    {shiftTrades.map(trade => (
+                        <div key={trade.id} className="p-2 bg-yellow-100 rounded-md flex justify-between items-center">
+                            <span>{trade.requestingUserName} for {trade.userToCoverName}</span>
+                            <button onClick={() => handleApproveTrade(trade.id)} className="px-2 py-1 bg-green-500 text-white rounded text-sm">Approve</button>
+                        </div>
+                    ))}
+
+                    <h3 className="text-lg font-semibold mt-4">Patrollers</h3>
+                    {shift.assignments.map(assignment => (
+                        <div key={assignment.userId} className="p-2 border-b">
+                           <div className="flex justify-between items-center">
+                                <div>
+                                    <p className="font-bold">{assignment.name}</p>
+                                    <p className="text-sm">{assignment.role}</p>
+                                </div>
+                                <div className="space-x-2">
+                                    <button onClick={() => handleClockInOut(assignment.userId, 'Clock In')} className="px-2 py-1 bg-blue-500 text-white rounded text-sm">In</button>
+                                    <button onClick={() => handleClockInOut(assignment.userId, 'Clock Out')} className="px-2 py-1 bg-red-500 text-white rounded text-sm">Out</button>
+                                </div>
+                           </div>
+                           <div className="text-sm mt-2">
+                                <p>Clock In: N/A, Clock Out: N/A</p>
+                                <div className="flex items-center space-x-2 mt-1">
+                                    <select className="p-1 border rounded-md text-sm">
+                                        <option>Unassigned</option>
+                                        {MOUNTAIN_AREAS.map(a => <option key={a} value={a}>{a}</option>)}
+                                    </select>
+                                     <select value={assignment.role} className="p-1 border rounded-md text-sm">
+                                        {ALL_PATROL_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                                    </select>
+                                </div>
+                           </div>
+                        </div>
+                    ))}
+                </div>
+            ) : <p>No shift found for this patrol on this date.</p>}
+        </div>
+    );
+};
+
 
 const ShiftCreator = ({ allUsers }) => {
-    // MODIFICATION: State simplified to one activeTab state
-    const [activeTab, setActiveTab] = useState('single'); // 'single', 'recurring', 'templates', 'scheduled'
+    const [activeTab, setActiveTab] = useState('single');
     const initialShiftData = {
         date: '',
         startTime: '',
         stopTime: '',
         patrolId: '',
         roles: [{ name: '', target: 1 }],
-        name: '', // For template name
+        name: '',
         recurrence: { type: 'daily', days: [], startDate: '', endDate: '', interval: 1 }
     };
     const [shiftData, setShiftData] = useState(initialShiftData);
@@ -654,7 +762,6 @@ const ShiftCreator = ({ allUsers }) => {
         <>
             <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow">
                 <div className="mb-6">
-                    {/* MODIFICATION: Tab structure updated */}
                     <div className="flex border-b border-gray-200">
                         <button onClick={() => { setActiveTab('single'); setSelectedTemplateId(''); }} className={`px-4 py-2 font-medium text-sm ${activeTab === 'single' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>
                             Create Single Shift
@@ -668,10 +775,13 @@ const ShiftCreator = ({ allUsers }) => {
                         <button onClick={() => setActiveTab('scheduled')} className={`px-4 py-2 font-medium text-sm ${activeTab === 'scheduled' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>
                             Scheduled Shifts
                         </button>
+                        {/* MODIFICATION: New tab for patrol attendance */}
+                        <button onClick={() => setActiveTab('attendance')} className={`px-4 py-2 font-medium text-sm ${activeTab === 'attendance' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>
+                            Patrol Attendance
+                        </button>
                     </div>
                 </div>
 
-                {/* MODIFICATION: Content rendering based on new activeTab state */}
                 {(activeTab === 'single' || activeTab === 'recurring') && (
                     <div className="space-y-6">
                         {activeTab === 'recurring' && (
@@ -796,6 +906,10 @@ const ShiftCreator = ({ allUsers }) => {
 
                 {activeTab === 'scheduled' && (
                     <ScheduledShiftsManager allUsers={allUsers} />
+                )}
+
+                {activeTab === 'attendance' && (
+                    <PatrolAttendance allUsers={allUsers} />
                 )}
             </div>
 
