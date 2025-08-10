@@ -84,7 +84,7 @@ const RecurrenceEditor = ({ recurrence, setRecurrence }) => {
     );
 };
 
-// MODIFICATION: New component for managing templates
+// Template Manager Component
 const TemplateManager = ({ templates, setTemplates, allUsers }) => {
     const [editingTemplate, setEditingTemplate] = useState(null);
 
@@ -95,13 +95,11 @@ const TemplateManager = ({ templates, setTemplates, allUsers }) => {
         }
         try {
             if (templateData.id) {
-                // Update existing template
                 const templateRef = doc(db, `artifacts/${appId}/public/data/shiftTemplates`, templateData.id);
                 await updateDoc(templateRef, templateData);
                 setTemplates(templates.map(t => t.id === templateData.id ? templateData : t));
                 alert("Template updated successfully!");
             } else {
-                // Create new template
                 const docRef = await addDoc(collection(db, `artifacts/${appId}/public/data/shiftTemplates`), templateData);
                 setTemplates([...templates, { id: docRef.id, ...templateData }]);
                 alert("Template created successfully!");
@@ -154,7 +152,7 @@ const TemplateManager = ({ templates, setTemplates, allUsers }) => {
     );
 };
 
-// MODIFICATION: New component for editing a single template
+// Template Editor Component
 const TemplateEditor = ({ template, onSave, onCancel, allUsers }) => {
     const [templateData, setTemplateData] = useState(template);
     const [assignments, setAssignments] = useState(template.assignments || []);
@@ -277,10 +275,219 @@ const TemplateEditor = ({ template, onSave, onCancel, allUsers }) => {
     );
 };
 
+// Scheduled Shifts Manager Component
+const ScheduledShiftsManager = ({ allUsers }) => {
+    const [shifts, setShifts] = useState([]);
+    const [editingShift, setEditingShift] = useState(null);
+
+    const fetchShifts = async () => {
+        try {
+            const querySnapshot = await getDocs(collection(db, `artifacts/${appId}/public/data/shifts`));
+            const fetchedShifts = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                date: doc.data().date.toDate().toISOString().split('T')[0]
+            }));
+            setShifts(fetchedShifts);
+        } catch (error) {
+            console.error("Error fetching shifts: ", error);
+        }
+    };
+
+    useEffect(() => {
+        fetchShifts();
+    }, []);
+
+    const handleUpdateShift = async (shiftData) => {
+        try {
+            const shiftRef = doc(db, `artifacts/${appId}/public/data/shifts`, shiftData.id);
+            await updateDoc(shiftRef, {
+                ...shiftData,
+                date: new Date(shiftData.date)
+            });
+            setShifts(shifts.map(s => s.id === shiftData.id ? shiftData : s));
+            setEditingShift(null);
+            alert("Shift updated successfully!");
+        } catch (error) {
+            console.error("Error updating shift: ", error);
+            alert("Failed to update shift.");
+        }
+    };
+
+    if (editingShift) {
+        return <ShiftEditor shift={editingShift} onSave={handleUpdateShift} onCancel={() => setEditingShift(null)} allUsers={allUsers} />;
+    }
+
+    return (
+        <div>
+            <h2 className="text-xl font-bold mb-4">Scheduled Shifts</h2>
+            <div className="space-y-4">
+                {shifts.map(shift => (
+                    <div key={shift.id} className="p-4 bg-gray-100 rounded-md">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <p className="font-bold">{shift.patrolId} - {shift.date}</p>
+                                <p className="text-sm text-gray-600">{shift.startTime} - {shift.stopTime}</p>
+                            </div>
+                            <button onClick={() => setEditingShift(shift)} className="p-2 text-blue-600 hover:text-blue-800"><Edit size={18} /></button>
+                        </div>
+                        <div className="mt-4">
+                            <h4 className="font-semibold">Staffing</h4>
+                            {shift.roles.map((role, index) => {
+                                const assignedCount = shift.assignments.filter(a => a.role === role.name).length;
+                                return (
+                                    <div key={index} className="flex justify-between items-center mt-1">
+                                        <span>{role.name}</span>
+                                        <span className={`${assignedCount < role.target ? 'text-red-500' : 'text-green-500'}`}>
+                                            {assignedCount} / {role.target}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// Shift Editor Component
+const ShiftEditor = ({ shift, onSave, onCancel, allUsers }) => {
+    const [shiftData, setShiftData] = useState(shift);
+    const [assignments, setAssignments] = useState(shift.assignments || []);
+    const [selectedRole, setSelectedRole] = useState('');
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setShiftData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleRoleChange = (index, field, value) => {
+        const newRoles = [...(shiftData.roles || [])];
+        newRoles[index][field] = value;
+        setShiftData(prev => ({ ...prev, roles: newRoles }));
+    };
+
+    const addRole = () => setShiftData(prev => ({ ...prev, roles: [...(prev.roles || []), { name: '', target: 1 }] }));
+    const removeRole = (index) => setShiftData(prev => ({ ...prev, roles: shiftData.roles.filter((_, i) => i !== index) }));
+
+    const eligibleUsers = useMemo(() => {
+        if (!selectedRole) return [];
+        return allUsers.filter(user => user.ability === selectedRole);
+    }, [selectedRole, allUsers]);
+
+    const handleAddAssignment = (userId) => {
+        if (!userId || assignments.some(a => a.userId === userId)) return;
+        const user = allUsers.find(u => u.id === userId);
+        setAssignments([...assignments, { userId: user.id, name: `${user.firstName} ${user.lastName}`, role: selectedRole }]);
+    };
+
+    const handleRemoveAssignment = (userId) => {
+        setAssignments(assignments.filter(a => a.userId !== userId));
+    };
+
+    const handleReassign = (userId, newRole) => {
+        setAssignments(assignments.map(a => a.userId === userId ? { ...a, role: newRole } : a));
+    };
+
+    const handleSave = () => {
+        onSave({ ...shiftData, assignments });
+    };
+
+    return (
+        <div className="p-6 bg-white rounded-lg shadow space-y-6">
+            <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold">Edit Shift</h2>
+                <button onClick={onCancel} className="p-2 text-gray-500 hover:text-gray-700"><X size={24} /></button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Shift Date</label>
+                    <input type="date" name="date" value={shiftData.date} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Patrol</label>
+                    <select name="patrolId" value={shiftData.patrolId} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                        <option value="">-- Select a Patrol --</option>
+                        {PATROLS.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Start Time</label>
+                    <input type="time" name="startTime" value={shiftData.startTime} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">Stop Time</label>
+                    <input type="time" name="stopTime" value={shiftData.stopTime} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
+                </div>
+            </div>
+            <div>
+                <h3 className="text-lg font-semibold">Roles & Staffing Targets</h3>
+                {(shiftData.roles || []).map((role, index) => (
+                    <div key={index} className="flex items-center space-x-2 mt-2">
+                        <select value={role.name} onChange={e => handleRoleChange(index, 'name', e.target.value)} className="p-2 border rounded-md flex-grow">
+                            <option value="">Select a Role...</option>
+                            {ALL_PATROL_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                        <input type="number" min="1" value={role.target} onChange={e => handleRoleChange(index, 'target', parseInt(e.target.value, 10))} placeholder="Target #" className="w-24 p-2 border rounded-md" />
+                        <button type="button" onClick={() => removeRole(index)} className="p-2 text-red-500 hover:text-red-700"><Trash2 size={18} /></button>
+                    </div>
+                ))}
+                <button onClick={addRole} className="mt-2 flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-800"><PlusCircle size={16} /><span>Add Role</span></button>
+            </div>
+            <div className="border-t pt-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Manage Assignments</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end mb-4">
+                    <div>
+                        <label htmlFor="role-assign" className="block text-sm font-medium text-gray-700">Role</label>
+                        <select id="role-assign" value={selectedRole} onChange={e => setSelectedRole(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                            <option value="">Select a Role to Assign</option>
+                            {ALL_PATROL_ROLES.map(role => <option key={role} value={role}>{role}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                         <label htmlFor="user-assign" className="block text-sm font-medium text-gray-700">User</label>
+                        <select id="user-assign" onChange={e => handleAddAssignment(e.target.value)} disabled={!selectedRole} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value="">
+                            <option value="">Select a User...</option>
+                            {eligibleUsers.map(user => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}
+                        </select>
+                    </div>
+                </div>
+                 {assignments.length > 0 && (
+                    <div className="mt-4">
+                        <h4 className="font-medium text-gray-700">Assigned:</h4>
+                        <ul className="mt-2 space-y-2">
+                            {assignments.map(a => (
+                                <li key={a.userId} className="flex justify-between items-center bg-gray-100 p-2 rounded-md">
+                                    <span>{a.name}</span>
+                                    <div className="flex items-center space-x-2">
+                                        <select value={a.role} onChange={(e) => handleReassign(a.userId, e.target.value)} className="p-1 border rounded-md text-sm">
+                                            {ALL_PATROL_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                                        </select>
+                                        <button type="button" onClick={() => handleRemoveAssignment(a.userId)} className="text-red-600 hover:text-red-800"><Trash2 size={16}/></button>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+            </div>
+            <div className="flex justify-end border-t pt-6 space-x-3">
+                <button onClick={onCancel} className="px-6 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancel</button>
+                <button onClick={handleSave} className="px-6 py-2 bg-blue-600 text-white rounded-md flex items-center space-x-2 hover:bg-blue-700">
+                    <Save size={18} />
+                    <span>Save Changes</span>
+                </button>
+            </div>
+        </div>
+    );
+};
+
 
 const ShiftCreator = ({ allUsers }) => {
-    const [mainTab, setMainTab] = useState('create'); // 'create' or 'templates'
-    const [creationMode, setCreationMode] = useState('single'); // 'single' or 'recurring'
+    // MODIFICATION: State simplified to one activeTab state
+    const [activeTab, setActiveTab] = useState('single'); // 'single', 'recurring', 'templates', 'scheduled'
     const initialShiftData = {
         date: '',
         startTime: '',
@@ -316,7 +523,6 @@ const ShiftCreator = ({ allUsers }) => {
         if (selectedTemplateId) {
             const template = shiftTemplates.find(t => t.id === selectedTemplateId);
             if (template) {
-                // MODIFICATION: Ensure all fields are populated when a template is selected
                 setShiftData({
                     ...initialShiftData,
                     ...template,
@@ -412,7 +618,7 @@ const ShiftCreator = ({ allUsers }) => {
             setShiftData(initialShiftData);
             setAssignments([]);
             setSelectedTemplateId('');
-            fetchTemplates(); // Refresh templates list
+            fetchTemplates();
         } catch (error) {
             console.error("Error saving recurring shift: ", error);
             alert("Failed to save recurring shift.");
@@ -432,12 +638,12 @@ const ShiftCreator = ({ allUsers }) => {
                 stopTime: shiftData.stopTime,
                 roles: shiftData.roles,
                 assignments: assignments,
-                recurrence: creationMode === 'recurring' ? shiftData.recurrence : { type: 'daily', days: [], startDate: '', endDate: '', interval: 1 }
+                recurrence: activeTab === 'recurring' ? shiftData.recurrence : { type: 'daily', days: [], startDate: '', endDate: '', interval: 1 }
             });
             alert(`Template "${newTemplateName}" saved successfully!`);
             setIsTemplateModalOpen(false);
             setNewTemplateName('');
-            fetchTemplates(); // Refresh templates list
+            fetchTemplates();
         } catch (error) {
             console.error("Error saving as new template: ", error);
             alert("Failed to save as new template.");
@@ -448,28 +654,27 @@ const ShiftCreator = ({ allUsers }) => {
         <>
             <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow">
                 <div className="mb-6">
+                    {/* MODIFICATION: Tab structure updated */}
                     <div className="flex border-b border-gray-200">
-                        <button onClick={() => setMainTab('create')} className={`px-4 py-2 font-medium text-sm ${mainTab === 'create' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>
-                            Create Shift
+                        <button onClick={() => { setActiveTab('single'); setSelectedTemplateId(''); }} className={`px-4 py-2 font-medium text-sm ${activeTab === 'single' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>
+                            Create Single Shift
                         </button>
-                        <button onClick={() => setMainTab('templates')} className={`px-4 py-2 font-medium text-sm ${mainTab === 'templates' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>
+                        <button onClick={() => setActiveTab('recurring')} className={`px-4 py-2 font-medium text-sm ${activeTab === 'recurring' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>
+                            Create Recurring Shift
+                        </button>
+                        <button onClick={() => setActiveTab('templates')} className={`px-4 py-2 font-medium text-sm ${activeTab === 'templates' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>
                             Shift Templates
+                        </button>
+                        <button onClick={() => setActiveTab('scheduled')} className={`px-4 py-2 font-medium text-sm ${activeTab === 'scheduled' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>
+                            Scheduled Shifts
                         </button>
                     </div>
                 </div>
 
-                {mainTab === 'create' && (
+                {/* MODIFICATION: Content rendering based on new activeTab state */}
+                {(activeTab === 'single' || activeTab === 'recurring') && (
                     <div className="space-y-6">
-                         <div className="flex border-b border-gray-200">
-                            <button onClick={() => { setCreationMode('single'); setSelectedTemplateId(''); }} className={`px-4 py-2 font-medium text-sm ${creationMode === 'single' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>
-                                Create Single Shift
-                            </button>
-                            <button onClick={() => setCreationMode('recurring')} className={`px-4 py-2 font-medium text-sm ${creationMode === 'recurring' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>
-                                Create Recurring Shift
-                            </button>
-                        </div>
-                        
-                        {creationMode === 'recurring' && (
+                        {activeTab === 'recurring' && (
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Choose Existing Template</label>
                                 <select
@@ -485,7 +690,7 @@ const ShiftCreator = ({ allUsers }) => {
                             </div>
                         )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {creationMode === 'single' && (
+                            {activeTab === 'single' && (
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700">Shift Date</label>
                                     <input type="date" name="date" value={shiftData.date} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
@@ -508,7 +713,7 @@ const ShiftCreator = ({ allUsers }) => {
                             </div>
                         </div>
 
-                        {creationMode === 'recurring' && (
+                        {activeTab === 'recurring' && (
                             <div>
                                 <h3 className="text-lg font-semibold">Recurrence</h3>
                                 <RecurrenceEditor recurrence={shiftData.recurrence} setRecurrence={(r) => setShiftData(p => ({ ...p, recurrence: r }))} />
@@ -564,13 +769,13 @@ const ShiftCreator = ({ allUsers }) => {
                         </div>
 
                         <div className="flex justify-end border-t pt-6 space-x-3">
-                            {creationMode === 'single' && (
+                            {activeTab === 'single' && (
                                 <button onClick={handleSaveSingleShift} className="px-6 py-2 bg-blue-600 text-white rounded-md flex items-center space-x-2 hover:bg-blue-700">
                                     <Save size={18} />
                                     <span>Save Shift</span>
                                 </button>
                             )}
-                            {creationMode === 'recurring' && (
+                            {activeTab === 'recurring' && (
                                 <>
                                     <button onClick={() => setIsTemplateModalOpen(true)} className="px-6 py-2 bg-gray-600 text-white font-semibold rounded-md shadow-sm hover:bg-gray-700">
                                         Save as New Template
@@ -585,8 +790,12 @@ const ShiftCreator = ({ allUsers }) => {
                     </div>
                 )}
                 
-                {mainTab === 'templates' && (
+                {activeTab === 'templates' && (
                     <TemplateManager templates={shiftTemplates} setTemplates={setShiftTemplates} allUsers={allUsers} />
+                )}
+
+                {activeTab === 'scheduled' && (
+                    <ScheduledShiftsManager allUsers={allUsers} />
                 )}
             </div>
 
