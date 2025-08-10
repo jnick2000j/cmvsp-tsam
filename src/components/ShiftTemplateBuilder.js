@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db, functions } from '../firebaseConfig';
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { PlusCircle, Trash2, Calendar, Save } from 'lucide-react';
+import { PATROL_ROLES } from '../constants'; // Assuming PATROL_ROLES is in your constants
 
 // Sub-component for a cleaner UI
 const RecurrenceEditor = ({ recurrence, setRecurrence }) => {
@@ -22,6 +23,29 @@ const RecurrenceEditor = ({ recurrence, setRecurrence }) => {
 
     return (
         <div className="p-4 border rounded-md bg-gray-50 space-y-4">
+            {/* --- NEW: Start and End Date for Recurrence --- */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label htmlFor="start-date" className="block text-sm font-medium text-gray-700">Start Date</label>
+                    <input
+                        type="date"
+                        id="start-date"
+                        value={recurrence.startDate || ''}
+                        onChange={(e) => handleRecurrenceChange('startDate', e.target.value)}
+                        className="mt-1 w-full border-gray-300 rounded-md shadow-sm"
+                    />
+                </div>
+                <div>
+                    <label htmlFor="end-date" className="block text-sm font-medium text-gray-700">End Date</label>
+                    <input
+                        type="date"
+                        id="end-date"
+                        value={recurrence.endDate || ''}
+                        onChange={(e) => handleRecurrenceChange('endDate', e.target.value)}
+                        className="mt-1 w-full border-gray-300 rounded-md shadow-sm"
+                    />
+                </div>
+            </div>
             <div>
                 <label className="block text-sm font-medium text-gray-700">Frequency</label>
                 <select
@@ -76,10 +100,10 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
     const [templates, setTemplates] = useState([]);
     const [selectedTemplate, setSelectedTemplate] = useState(null);
     const [templateData, setTemplateData] = useState({});
-    // NEW: State for the date range to apply the template
-    const [applyStartDate, setApplyStartDate] = useState('');
-    const [applyEndDate, setApplyEndDate] = useState('');
     
+    // --- NEW: State for the user assignment UI ---
+    const [selectedRoleForAssignment, setSelectedRoleForAssignment] = useState('');
+
     useEffect(() => {
         const fetchTemplates = async () => {
             const templatesCollection = collection(db, 'shiftTemplates');
@@ -92,10 +116,10 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
 
     const handleSelectTemplate = (template) => {
         setSelectedTemplate(template);
-        // Ensure recurrence object has default values if not present
         const data = {
             ...template,
-            recurrence: template.recurrence || { type: 'weekly', interval: 1, days: [] }
+            recurrence: template.recurrence || { type: 'weekly', interval: 1, days: [], startDate: '', endDate: '' },
+            assignments: template.assignments || {}
         };
         setTemplateData(data);
     };
@@ -107,7 +131,7 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
             patrol: '',
             roles: [{ name: '', target: 1 }],
             assignments: {},
-            recurrence: { type: 'weekly', interval: 1, days: [] }
+            recurrence: { type: 'weekly', interval: 1, days: [], startDate: '', endDate: '' }
         });
     };
 
@@ -117,7 +141,7 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
     };
 
     const handleRoleChange = (index, field, value) => {
-        const newRoles = [...templateData.roles];
+        const newRoles = [...(templateData.roles || [])];
         newRoles[index][field] = value;
         setTemplateData(prev => ({ ...prev, roles: newRoles }));
     };
@@ -134,17 +158,29 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
         setTemplateData(prev => ({ ...prev, roles: newRoles }));
     };
 
-    const handleAssignmentChange = (roleName, userId) => {
+    // --- NEW: Logic for assigning users to roles ---
+    const eligibleUsersForAssignment = useMemo(() => {
+        if (!selectedRoleForAssignment) return [];
+        return allUsers.filter(user => user.ability === selectedRoleForAssignment);
+    }, [selectedRoleForAssignment, allUsers]);
+
+    const handleAddAssignment = (userId) => {
+        if (!userId || !selectedRoleForAssignment) return;
+
         setTemplateData(prev => {
             const newAssignments = { ...(prev.assignments || {}) };
-            if (!newAssignments[roleName]) {
-                newAssignments[roleName] = [];
+            const currentAssigned = newAssignments[selectedRoleForAssignment] || [];
+            if (!currentAssigned.includes(userId)) {
+                newAssignments[selectedRoleForAssignment] = [...currentAssigned, userId];
             }
-            if (newAssignments[roleName].includes(userId)) {
-                newAssignments[roleName] = newAssignments[roleName].filter(id => id !== userId);
-            } else {
-                newAssignments[roleName].push(userId);
-            }
+            return { ...prev, assignments: newAssignments };
+        });
+    };
+
+    const handleRemoveAssignment = (role, userId) => {
+        setTemplateData(prev => {
+            const newAssignments = { ...prev.assignments };
+            newAssignments[role] = newAssignments[role].filter(id => id !== userId);
             return { ...prev, assignments: newAssignments };
         });
     };
@@ -160,10 +196,9 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
                 await updateDoc(templateRef, templateData);
             } else {
                 const docRef = await addDoc(collection(db, 'shiftTemplates'), templateData);
-                setSelectedTemplate({ id: docRef.id, ...templateData }); // Select the new template
+                setSelectedTemplate({ id: docRef.id, ...templateData });
             }
             alert("Template saved successfully!");
-            // Refetch templates to update the list
             const snapshot = await getDocs(collection(db, 'shiftTemplates'));
             setTemplates(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         } catch (error) {
@@ -177,16 +212,17 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
             alert("Please select a saved template to apply.");
             return;
         }
-        if (!applyStartDate || !applyEndDate) {
-            alert("Please select a Start Date and an End Date.");
+        // UPDATED: Use start and end dates from the template's recurrence data
+        if (!templateData.recurrence?.startDate || !templateData.recurrence?.endDate) {
+            alert("Please set a Start Date and an End Date in the recurrence section.");
             return;
         }
         const applyShiftTemplate = httpsCallable(functions, 'applyShiftTemplate');
         try {
             const result = await applyShiftTemplate({ 
                 templateId: selectedTemplate.id, 
-                startDate: applyStartDate, 
-                endDate: applyEndDate 
+                startDate: templateData.recurrence.startDate, 
+                endDate: templateData.recurrence.endDate 
             });
             alert(result.data.message);
         } catch (error) {
@@ -197,7 +233,6 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Left Column: Template List */}
             <div className="md:col-span-1">
                 <h2 className="text-xl font-semibold mb-2">Templates</h2>
                 <button onClick={handleNewTemplate} className="w-full mb-4 p-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">Create New Template</button>
@@ -209,13 +244,12 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
                     ))}
                 </ul>
             </div>
-            {/* Right Column: Template Editor */}
             <div className="md:col-span-2">
                 {templateData.name !== undefined ? (
                     <div className="space-y-6 p-6 bg-white rounded-lg shadow">
                         <div className="flex justify-between items-center">
                             <input name="name" value={templateData.name} onChange={handleInputChange} placeholder="Template Name" className="text-xl font-bold w-full p-2 border rounded-md" />
-                             <button onClick={handleSaveTemplate} className="ml-4 px-4 py-2 bg-green-500 text-white rounded-md flex items-center space-x-2 whitespace-nowrap"><Save size={18} /><span>Save</span></button>
+                            <button onClick={handleSaveTemplate} className="ml-4 px-4 py-2 bg-green-500 text-white rounded-md flex items-center space-x-2 whitespace-nowrap"><Save size={18} /><span>Save</span></button>
                         </div>
                         
                         <div>
@@ -227,7 +261,7 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
                         </div>
                         
                         <div>
-                            <h3 className="text-lg font-semibold">Roles & Staffing</h3>
+                            <h3 className="text-lg font-semibold">Roles & Staffing Targets</h3>
                             {templateData.roles?.map((role, index) => (
                                 <div key={index} className="flex items-center space-x-2 mt-2">
                                     <input value={role.name} onChange={e => handleRoleChange(index, 'name', e.target.value)} placeholder="Role Name" className="p-2 border rounded-md flex-grow" />
@@ -238,6 +272,45 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
                             <button onClick={addRole} className="mt-2 flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-800"><PlusCircle size={16} /><span>Add Role</span></button>
                         </div>
 
+                        {/* --- NEW: User Assignment Section --- */}
+                        <div className="border-t pt-6">
+                            <h3 className="text-lg font-semibold text-gray-800 mb-4">Assign Specific Staff to Template</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                                <div>
+                                    <label htmlFor="role-assign" className="block text-sm font-medium text-gray-700">Role</label>
+                                    <select id="role-assign" value={selectedRoleForAssignment} onChange={e => setSelectedRoleForAssignment(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                        <option value="">Select a Role to Assign</option>
+                                        {PATROL_ROLES.map(role => <option key={role} value={role}>{role}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label htmlFor="user-assign" className="block text-sm font-medium text-gray-700">User</label>
+                                    <select id="user-assign" onChange={e => handleAddAssignment(e.target.value)} disabled={!selectedRoleForAssignment} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value="">
+                                        <option value="">Select a User...</option>
+                                        {eligibleUsersForAssignment.map(user => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            {Object.keys(templateData.assignments || {}).length > 0 && (
+                                <div className="mt-4">
+                                    <h4 className="font-medium text-gray-700">Assigned:</h4>
+                                    <ul className="mt-2 space-y-2">
+                                        {Object.entries(templateData.assignments).map(([role, userIds]) => 
+                                            userIds.map(userId => {
+                                                const user = allUsers.find(u => u.id === userId);
+                                                return (
+                                                    <li key={userId} className="flex justify-between items-center bg-gray-100 p-2 rounded-md">
+                                                        <span>{user ? `${user.firstName} ${user.lastName}` : 'Unknown User'} ({role})</span>
+                                                        <button type="button" onClick={() => handleRemoveAssignment(role, userId)} className="text-red-600 hover:text-red-800">Remove</button>
+                                                    </li>
+                                                )
+                                            })
+                                        )}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+
                         <div>
                             <h3 className="text-lg font-semibold">Recurrence</h3>
                             <RecurrenceEditor recurrence={templateData.recurrence} setRecurrence={(newRecurrence) => setTemplateData(p => ({...p, recurrence: newRecurrence}))} />
@@ -246,16 +319,7 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
                         {selectedTemplate && (
                             <div className="mt-6 border-t pt-6">
                                 <h3 className="text-lg font-semibold">Apply Template to Schedule</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">Start Date</label>
-                                        <input type="date" value={applyStartDate} onChange={e => setApplyStartDate(e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
-                                    </div>
-                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">End Date</label>
-                                        <input type="date" value={applyEndDate} onChange={e => setApplyEndDate(e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
-                                    </div>
-                                </div>
+                                <p className="text-sm text-gray-600 mb-2">This will generate shifts based on the start and end dates defined in the recurrence settings above.</p>
                                 <button onClick={handleApplyTemplate} className="mt-4 w-full p-2 bg-purple-600 text-white rounded-md flex items-center justify-center space-x-2 hover:bg-purple-700"><Calendar size={18} /><span>Apply to Schedule</span></button>
                             </div>
                         )}

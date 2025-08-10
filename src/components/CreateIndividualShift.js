@@ -1,15 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { db } from '../firebaseConfig';
 import { doc, setDoc } from 'firebase/firestore';
 import { PlusCircle, Trash2, Save } from 'lucide-react';
+import { PATROL_ROLES } from '../constants'; // Assuming PATROL_ROLES is in your constants
 
 const CreateIndividualShift = ({ allUsers, patrols }) => {
     const [shiftData, setShiftData] = useState({
         date: '',
         patrolId: '',
         roles: [{ name: '', target: 1 }],
-        assignments: {}
+        // Note: The 'assignments' are now handled by a separate state for easier UI management
     });
+
+    // --- NEW: State for managing specific user assignments ---
+    const [assignments, setAssignments] = useState([]);
+    const [selectedRole, setSelectedRole] = useState('');
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -33,6 +38,24 @@ const CreateIndividualShift = ({ allUsers, patrols }) => {
         const newRoles = shiftData.roles.filter((_, i) => i !== index);
         setShiftData(prev => ({ ...prev, roles: newRoles }));
     };
+
+    // --- NEW: Memoized list of users eligible for the selected role ---
+    const eligibleUsers = useMemo(() => {
+        if (!selectedRole) return [];
+        return allUsers.filter(user => user.ability === selectedRole);
+    }, [selectedRole, allUsers]);
+
+    // --- NEW: Handler to add a user to the assignment list ---
+    const handleAddAssignment = (userId) => {
+        if (!userId || assignments.some(a => a.userId === userId)) return;
+        const user = allUsers.find(u => u.id === userId);
+        setAssignments([...assignments, { userId: user.id, name: `${user.firstName} ${user.lastName}`, role: selectedRole }]);
+    };
+
+    // --- NEW: Handler to remove a user from the assignment list ---
+    const handleRemoveAssignment = (userId) => {
+        setAssignments(assignments.filter(a => a.userId !== userId));
+    };
     
     const handleSaveShift = async () => {
         if (!shiftData.date || !shiftData.patrolId) {
@@ -40,25 +63,26 @@ const CreateIndividualShift = ({ allUsers, patrols }) => {
             return;
         }
 
-        // Create a unique, predictable ID for the shift
         const shiftId = `${shiftData.patrolId}-${shiftData.date}`;
         const shiftRef = doc(db, 'shifts', shiftId);
 
         try {
-            // Use setDoc with merge: true to create or overwrite.
+            // UPDATED: Include the new assignments array in the data to be saved
             await setDoc(shiftRef, {
                 ...shiftData,
-                date: new Date(shiftData.date), // Store as a Firestore timestamp
+                assignments: assignments, // Add the specific user assignments
+                date: new Date(shiftData.date),
             }, { merge: true });
 
             alert("Shift saved successfully!");
-            // Optionally reset the form
+            // Reset the form and the new assignments state
             setShiftData({
                 date: '',
                 patrolId: '',
                 roles: [{ name: '', target: 1 }],
-                assignments: {}
             });
+            setAssignments([]);
+            setSelectedRole('');
         } catch (error) {
             console.error("Error saving shift: ", error);
             alert("Failed to save shift. See console for details.");
@@ -83,7 +107,7 @@ const CreateIndividualShift = ({ allUsers, patrols }) => {
                     </div>
                 </div>
                 <div>
-                    <h3 className="text-lg font-semibold">Roles & Staffing</h3>
+                    <h3 className="text-lg font-semibold">Roles & Staffing Targets</h3>
                     {shiftData.roles.map((role, index) => (
                         <div key={index} className="flex items-center space-x-2 mt-2">
                             <input value={role.name} onChange={e => handleRoleChange(index, 'name', e.target.value)} placeholder="Role Name (e.g., Team Lead)" className="p-2 border rounded-md flex-grow" />
@@ -93,7 +117,42 @@ const CreateIndividualShift = ({ allUsers, patrols }) => {
                     ))}
                     <button onClick={addRole} className="mt-2 flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-800"><PlusCircle size={16} /><span>Add Role</span></button>
                 </div>
-                <div className="flex justify-end">
+
+                {/* --- NEW: User Assignment Section --- */}
+                <div className="border-t pt-6">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Assign Specific Staff</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+                        <div>
+                            <label htmlFor="role-assign" className="block text-sm font-medium text-gray-700">Role</label>
+                            <select id="role-assign" value={selectedRole} onChange={e => setSelectedRole(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                <option value="">Select a Role to Assign</option>
+                                {PATROL_ROLES.map(role => <option key={role} value={role}>{role}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                             <label htmlFor="user-assign" className="block text-sm font-medium text-gray-700">User</label>
+                            <select id="user-assign" onChange={e => handleAddAssignment(e.target.value)} disabled={!selectedRole} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value="">
+                                <option value="">Select a User...</option>
+                                {eligibleUsers.map(user => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                     {assignments.length > 0 && (
+                        <div className="mt-4">
+                            <h4 className="font-medium text-gray-700">Assigned:</h4>
+                            <ul className="mt-2 space-y-2">
+                                {assignments.map(a => (
+                                    <li key={a.userId} className="flex justify-between items-center bg-gray-100 p-2 rounded-md">
+                                        <span>{a.name} ({a.role})</span>
+                                        <button type="button" onClick={() => handleRemoveAssignment(a.userId)} className="text-red-600 hover:text-red-800">Remove</button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex justify-end border-t pt-6">
                     <button onClick={handleSaveShift} className="px-6 py-2 bg-blue-600 text-white rounded-md flex items-center space-x-2 hover:bg-blue-700">
                         <Save size={18} />
                         <span>Save Shift</span>
