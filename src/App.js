@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, doc, onSnapshot, query, updateDoc, addDoc, getDocs, where, serverTimestamp, arrayRemove, arrayUnion } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, updateDoc, addDoc, getDocs, where, serverTimestamp, arrayRemove, arrayUnion, runTransaction } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
 import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROL_LEADER_ROLES, appId } from './constants';
 
@@ -14,20 +14,19 @@ import ProfileManagement from './components/ProfileManagement';
 import CertificateModal from './components/CertificateModal';
 import ConfirmationModal from './components/ConfirmationModal';
 import Dashboard from './components/Dashboard';
-// Import the new parent ShiftManagement component
 import ShiftManagement from './components/ShiftManagement';
 import TimeClock from './components/TimeClock';
 import MyTraining from './components/MyTraining';
 import Branding from './components/Branding';
 import ClassClock from './components/ClassClock';
 
-// --- ADD IMPORTS FOR NEW SCHEDULING COMPONENTS ---
+// --- SCHEDULING COMPONENTS ---
 import MySchedule from './components/MySchedule';
 import HelpUsOut from './components/HelpUsOut';
-// Note: ShiftManagement is already imported above
+import ShiftTradeModal from './components/ShiftTradeModal'; // Import the new modal
 
 import { generateClassPdf } from './utils/pdfGenerator';
-import { LayoutDashboard, ClipboardList, Library, Shield, Calendar, HelpingHand, UserCheck } from 'lucide-react'; // Added new icons
+import { LayoutDashboard, ClipboardList, Library, Shield, Calendar, HelpingHand, UserCheck } from 'lucide-react';
 
 export default function App() {
     const [user, setUser] = useState(null);
@@ -61,6 +60,11 @@ export default function App() {
     const [confirmAction, setConfirmAction] = useState(null);
     const [enrollmentError, setEnrollmentError] = useState(null);
 
+    // --- State for Shift Trading ---
+    const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
+    const [tradeableShift, setTradeableShift] = useState(null);
+    const [shiftTradeRequests, setShiftTradeRequests] = useState([]);
+
     const isTimeClockView = window.location.pathname === '/timeclock';
     const isClassClockView = window.location.pathname === '/classclock';
 
@@ -82,16 +86,13 @@ export default function App() {
             setLoginMessage('');
             if (authUser) {
                 const unsubUser = onSnapshot(doc(db, "users", authUser.uid), (userDoc) => {
-                    if (!userDoc.exists()) {
-                        return;
-                    }
-
+                    if (!userDoc.exists()) return;
                     const userData = userDoc.data();
                     if (userData.isApproved) {
                         setUser({ uid: authUser.uid, id: userDoc.id, ...userData });
                     } else {
                         signOut(auth);
-                        setLoginMessage("Your account is pending administrator approval. Please wait for an email notification before logging in.");
+                        setLoginMessage("Your account is pending administrator approval.");
                     }
                     setIsAuthLoading(false);
                 });
@@ -129,6 +130,13 @@ export default function App() {
             }, (err) => console.error(`Failed to load ${name}:`, err));
         });
 
+        // --- MODIFIED: Listener for pending shift trade requests now includes multiple statuses ---
+        const tradeRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/shiftTradeRequests`), where('status', 'in', ['pending_user_approval', 'pending_leader_approval']));
+        const unsubTrades = onSnapshot(tradeRequestsQuery, (snapshot) => {
+            setShiftTradeRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+        unsubscribers.push(unsubTrades);
+
         return () => unsubscribers.forEach(unsub => unsub());
     }, [user, isAuthLoading, isTimeClockView, isClassClockView]);
 
@@ -140,31 +148,99 @@ export default function App() {
         return assignments;
     }, [stations, classes, user]);
 
-    const usersForApproval = useMemo(() => {
-        return allUsers.filter(u => u.needsApproval);
-    }, [allUsers]);
+    const usersForApproval = useMemo(() => allUsers.filter(u => u.needsApproval), [allUsers]);
 
     const handleApproveUser = async (userId) => {
-        const userRef = doc(db, 'users', userId);
-        await updateDoc(userRef, {
-            isApproved: true,
-            needsApproval: false
-        });
+        await updateDoc(doc(db, 'users', userId), { isApproved: true, needsApproval: false });
     };
 
     const handleSignOut = () => { setView('dashboard'); signOut(auth); };
-    const handleNavClick = (mainView, sub = '') => {
-        setView(mainView);
-        setSubView(sub);
+    const handleNavClick = (mainView, sub = '') => { setView(mainView); setSubView(sub); };
+    const handleConfirm = () => { if (confirmAction?.action) confirmAction.action(); setConfirmAction(null); };
+
+    // --- Shift Trading Handlers ---
+    const handleOpenTradeModal = (shift) => { setTradeableShift(shift); setIsTradeModalOpen(true); };
+    const handleCloseTradeModal = () => { setTradeableShift(null); setIsTradeModalOpen(false); };
+
+    // MODIFIED: Initial submission now waits for the other user's approval
+    const handleSubmitShiftTrade = async ({ requesterShift, requestedUser, requestedShift }) => {
+        if (!user || !requesterShift || !requestedUser || !requestedShift) return;
+        await addDoc(collection(db, `artifacts/${appId}/public/data/shiftTradeRequests`), {
+            requesterId: user.uid,
+            requesterName: `${user.firstName} ${user.lastName}`,
+            requesterShiftId: requesterShift.id,
+            requesterShiftInfo: `${new Date(requesterShift.date).toLocaleDateString()} - ${requesterShift.type}`,
+            requestedUserId: requestedUser.id,
+            requestedUserName: `${requestedUser.firstName} ${requestedUser.lastName}`,
+            requestedShiftId: requestedShift.id,
+            requestedShiftInfo: `${new Date(requestedShift.date).toLocaleDateString()} - ${requestedShift.type}`,
+            status: 'pending_user_approval', // New initial status
+            approvals: { [user.uid]: true }, // Requester implicitly approves
+            requestTimestamp: serverTimestamp(),
+        });
+        handleCloseTradeModal();
+    };
+    
+    // NEW: Handler for the second user to approve the trade
+    const handleUserApproveShiftTrade = async (tradeRequest) => {
+        const tradeRequestRef = doc(db, `artifacts/${appId}/public/data/shiftTradeRequests`, tradeRequest.id);
+        await updateDoc(tradeRequestRef, {
+            status: 'pending_leader_approval', // Now moves to leadership for final approval
+            approvals: { ...tradeRequest.approvals, [user.uid]: true }
+        });
     };
 
-    const handleConfirm = () => {
-        if (confirmAction && typeof confirmAction.action === 'function') {
-            confirmAction.action();
+    // NEW: Handler for any party to deny/cancel the trade
+    const handleDenyShiftTrade = async (tradeRequest) => {
+        const tradeRequestRef = doc(db, `artifacts/${appId}/public/data/shiftTradeRequests`, tradeRequest.id);
+        await updateDoc(tradeRequestRef, {
+            status: 'denied',
+            deniedBy: user.uid,
+            deniedByName: `${user.firstName} ${user.lastName}`
+        });
+    };
+
+    // MODIFIED: This is now the FINAL leadership approval step
+    const handleApproveShiftTrade = async (tradeRequest) => {
+        const requesterShiftRef = doc(db, `artifacts/${appId}/public/data/shifts`, tradeRequest.requesterShiftId);
+        const requestedShiftRef = doc(db, `artifacts/${appId}/public/data/shifts`, tradeRequest.requestedShiftId);
+        const tradeRequestRef = doc(db, `artifacts/${appId}/public/data/shiftTradeRequests`, tradeRequest.id);
+        const logCollectionRef = collection(db, `artifacts/${appId}/public/data/shiftTradeLogs`);
+
+        try {
+            await runTransaction(db, async (transaction) => {
+                const requesterShiftDoc = await transaction.get(requesterShiftRef);
+                const requestedShiftDoc = await transaction.get(requestedShiftRef);
+
+                if (!requesterShiftDoc.exists() || !requestedShiftDoc.exists()) throw "One of the shifts in the trade does not exist.";
+                
+                const requesterAssignment = requesterShiftDoc.data().assignments.find(a => a.userId === tradeRequest.requesterId);
+                const requestedAssignment = requestedShiftDoc.data().assignments.find(a => a.userId === tradeRequest.requestedUserId);
+
+                if (!requesterAssignment || !requestedAssignment) throw "Could not find user assignments in one of the shifts.";
+
+                transaction.update(requesterShiftRef, { assignments: arrayRemove(requesterAssignment) });
+                transaction.update(requesterShiftRef, { assignments: arrayUnion({ ...requesterAssignment, userId: tradeRequest.requestedUserId }) });
+                
+                transaction.update(requestedShiftRef, { assignments: arrayRemove(requestedAssignment) });
+                transaction.update(requestedShiftRef, { assignments: arrayUnion({ ...requestedAssignment, userId: tradeRequest.requesterId }) });
+                
+                const approvalData = {
+                    status: 'approved',
+                    approvedBy: user.uid,
+                    approvedByName: `${user.firstName} ${user.lastName}`,
+                    approvalTimestamp: serverTimestamp()
+                };
+                
+                transaction.update(tradeRequestRef, approvalData);
+                transaction.set(doc(logCollectionRef, tradeRequest.id), { ...tradeRequest, ...approvalData });
+            });
+        } catch (e) {
+            console.error("Shift trade transaction failed: ", e);
         }
-        setConfirmAction(null);
     };
-
+    
+    // Omitted other handlers for brevity...
     const handlePrerequisiteCheckin = async (course) => {
         const todayISO = new Date().toISOString().split('T')[0];
         const checkInData = {
@@ -268,26 +344,14 @@ export default function App() {
         });
     };
 
-
     if (isAuthLoading || (user && !user.firstName && !isTimeClockView && !isClassClockView)) {
         return <div className="flex items-center justify-center h-screen bg-gray-100"><div className="text-xl font-semibold text-gray-600">Loading Application...</div></div>;
     }
-
-    if (isTimeClockView) {
-        return <TimeClock users={allUsers} timeClockEntries={timeClockEntries} onClockIn={handleClockIn} onClockOut={handleClockOut} branding={branding} timeClocks={timeClocks} />;
-    }
-
-    if (isClassClockView) {
-        return <ClassClock users={allUsers} classes={classes} stations={stations} dailyCheckIns={dailyCheckIns} handleClassCheckIn={handleClassCheckIn} handleClassCheckOut={handleClassCheckOut} branding={branding} timeClocks={timeClocks} />;
-    }
-
-
-    if (!user) {
-        return <AuthComponent logoUrl={branding.siteLogo} loginTitle={branding.loginTitle} authMessage={loginMessage} setAuthMessage={setLoginMessage} />;
-    }
+    if (isTimeClockView) return <TimeClock {...{users: allUsers, timeClockEntries, onClockIn: handleClockIn, onClockOut: handleClockOut, branding, timeClocks}} />;
+    if (isClassClockView) return <ClassClock {...{users: allUsers, classes, stations, dailyCheckIns, handleClassCheckIn, handleClassCheckOut, branding, timeClocks}} />;
+    if (!user) return <AuthComponent {...{logoUrl: branding.siteLogo, loginTitle: branding.loginTitle, authMessage: loginMessage, setAuthMessage: setLoginMessage}} />;
 
     const isInstructor = user.isAdmin || INSTRUCTOR_ROLES.includes(user.role);
-    const isSupport = SUPPORT_ROLES.includes(user.role);
     const isPatrolLeadership = user.isAdmin || PATROL_LEADER_ROLES.includes(user.ability);
     const hasSchedulingAccess = user.isAdmin || user.allowScheduling;
 
@@ -301,36 +365,26 @@ export default function App() {
             case 'admin': return <AdminPortal {...{ currentUser: user, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser: handleApproveUser, branding }} />;
             case 'siteBranding': return <div className="p-4 sm:p-6 lg:p-8"><Branding branding={branding} onUpdate={setBranding} /></div>;
             case 'myTraining':
-                return <MyTraining {...{
-                    user,
-                    enrolledClassesDetails,
-                    dailyCheckIns,
-                    setActiveClassId,
-                    handlePrerequisiteCheckin,
-                    handleCancelEnrollment,
-                    allUsers,
-                    classes,
-                    stations,
-                    checkIns,
-                    generateClassPdf
-                }} />;
+                return <MyTraining {...{ user, enrolledClassesDetails, dailyCheckIns, setActiveClassId, handlePrerequisiteCheckin, handleCancelEnrollment, allUsers, classes, stations, checkIns, generateClassPdf }} />;
             case 'attendance': return <AttendanceTabs {...{ user, allUsers, classes, stations, attendanceRecords, subView, setSubView }} />;
             case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: handleEnroll, enrollmentError, branding }} />;
             case 'profile': return <ProfileManagement {...{ user, setConfirmAction }} />;
             
-            // --- NEW CASES FOR SCHEDULING VIEWS ---
             case 'mySchedule':
                 return <MySchedule 
                     currentUser={user}
                     allUsers={allUsers}
                     shifts={shifts}
+                    timeClockEntries={timeClockEntries}
+                    onTradeRequest={handleOpenTradeModal}
                 />;
             case 'helpUsOut':
                 return <HelpUsOut
                     currentUser={user}
                     allUsers={allUsers}
                     shifts={shifts}
-                    timeClockEntries={timeClockEntries}
+                    classes={classes}
+                    stations={stations}
                 />;
             case 'scheduleManagement':
                 return isPatrolLeadership 
@@ -339,14 +393,13 @@ export default function App() {
                         allUsers={allUsers}
                         patrols={stations.filter(s => s.type === 'patrol')}
                       />
-                    : <div>Access Denied. You do not have permission to manage schedules.</div>;
-
+                    : <div>Access Denied.</div>;
             case 'dashboard':
             default:
                 return <Dashboard {...{
                     user,
                     isInstructor,
-                    isStudent: !isInstructor && !isSupport,
+                    isStudent: !isInstructor,
                     enrolledClassesDetails,
                     dailyCheckIns,
                     setActiveClassId,
@@ -361,9 +414,13 @@ export default function App() {
                     allPendingActions: [],
                     timeClockEntries,
                     allUsers,
-                    isPatrolLeadership: hasSchedulingAccess && isPatrolLeadership,
+                    isPatrolLeadership,
                     usersForApproval,
-                    onApproveUser: handleApproveUser
+                    onApproveUser: handleApproveUser,
+                    shiftTradeRequests,
+                    onApproveShiftTrade: handleApproveShiftTrade,
+                    onUserApproveShiftTrade: handleUserApproveShiftTrade,
+                    onDenyShiftTrade: handleDenyShiftTrade
                 }} />;
         }
     };
@@ -386,23 +443,19 @@ export default function App() {
                             <button onClick={handleSignOut} className="text-sm font-medium text-accent hover:text-accent-hover">Sign Out</button>
                         </div>
                     </div>
-                    {/* --- UPDATED NAVIGATION BAR --- */}
                     <nav className="flex space-x-4 border-t border-gray-200 -mb-px overflow-x-auto">
                         <button onClick={() => handleNavClick('dashboard')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'dashboard' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><LayoutDashboard className="mr-1.5 h-4 w-4" />My Dashboard</button>
                         
-                        {/* New "My Schedule" Tab */}
                         <button onClick={() => handleNavClick('mySchedule')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'mySchedule' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Calendar className="mr-1.5 h-4 w-4" />My Schedule</button>
                         
-                        {/* New "Help Us Out" Tab */}
                         <button onClick={() => handleNavClick('helpUsOut')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'helpUsOut' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><HelpingHand className="mr-1.5 h-4 w-4" />Help Us Out!</button>
 
                         <button onClick={() => handleNavClick('myTraining')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'myTraining' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Library className="mr-1.5 h-4 w-4" />My Training</button>
                         
-                        {isInstructor && (<button onClick={() => handleNavClick('attendance', 'checkInOut')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'attendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ClipboardList className="mr-1.5 h-4 w-4" />Attendance Management</button>)}
-                        
                         <button onClick={() => handleNavClick('catalog')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'catalog' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Library className="mr-1.5 h-4 w-4" />Course Catalog</button>
                         
-                        {/* Restricted "Schedule Management" Tab */}
+                        {isInstructor && (<button onClick={() => handleNavClick('attendance', 'checkInOut')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'attendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ClipboardList className="mr-1.5 h-4 w-4" />Attendance Management</button>)}
+                        
                         {isPatrolLeadership && <button onClick={() => handleNavClick('scheduleManagement')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'scheduleManagement' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserCheck className="mr-1.5 h-4 w-4" />Schedule Management</button>}
 
                         {user.isAdmin && <button onClick={() => handleNavClick('admin')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'admin' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Shield className="mr-1.5 h-4 w-4" />Admin Portal</button>}
@@ -412,6 +465,18 @@ export default function App() {
             <main className="max-w-7xl mx-auto">
                 {renderContent()}
             </main>
+            {/* --- Render Shift Trade Modal --- */}
+            {isTradeModalOpen && (
+                <ShiftTradeModal
+                    isOpen={isTradeModalOpen}
+                    onClose={handleCloseTradeModal}
+                    currentUser={user}
+                    shiftToTrade={tradeableShift}
+                    allUsers={allUsers}
+                    shifts={shifts}
+                    onSubmit={handleSubmitShiftTrade}
+                />
+            )}
             <CertificateModal isOpen={isCertificateModalOpen} onClose={() => setIsCertificateModalOpen(false)} certificateData={null} />
             <ConfirmationModal
                 isOpen={!!confirmAction}
@@ -423,4 +488,3 @@ export default function App() {
         </div>
     );
 }
-
