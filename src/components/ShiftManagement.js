@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import Scheduling from './Scheduling'; // Your existing schedule view component
-import ShiftTemplateBuilder from './ShiftTemplateBuilder'; // The template component from before
-import CreateIndividualShift from './CreateIndividualShift'; // The new component
+import ShiftTemplateBuilder from './ShiftTemplateBuilder';
+import CreateIndividualShift from './CreateIndividualShift';
 
 const ShiftManagement = ({ currentUser, allUsers, patrols }) => {
-    const [activeTab, setActiveTab] = useState('schedule');
+    // The 'schedule' tab has been removed. The default is now 'create'.
+    const [activeTab, setActiveTab] = useState('create');
 
-    // Helper to render the tab button styles
     const tabClass = (tabName) => 
         `px-4 py-2 font-medium text-sm rounded-t-lg ${
             activeTab === tabName 
@@ -18,9 +17,7 @@ const ShiftManagement = ({ currentUser, allUsers, patrols }) => {
         <div className="p-4 sm:p-6">
             <h1 className="text-2xl font-bold mb-4 text-gray-800">Shift Management</h1>
             <div className="flex border-b border-gray-200">
-                <button className={tabClass('schedule')} onClick={() => setActiveTab('schedule')}>
-                    Master Schedule
-                </button>
+                {/* The "Master Schedule" button has been removed from here. */}
                 <button className={tabClass('create')} onClick={() => setActiveTab('create')}>
                     Create Individual Shifts
                 </button>
@@ -30,9 +27,7 @@ const ShiftManagement = ({ currentUser, allUsers, patrols }) => {
             </div>
 
             <div className="mt-6">
-                {activeTab === 'schedule' && (
-                    <Scheduling currentUser={currentUser} allUsers={allUsers} patrols={patrols} />
-                )}
+                {/* The rendering logic for the 'schedule' tab has been removed. */}
                 {activeTab === 'create' && (
                     <CreateIndividualShift allUsers={allUsers} patrols={patrols} />
                 )}

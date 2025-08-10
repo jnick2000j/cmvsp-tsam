@@ -14,30 +14,35 @@ import ProfileManagement from './components/ProfileManagement';
 import CertificateModal from './components/CertificateModal';
 import ConfirmationModal from './components/ConfirmationModal';
 import Dashboard from './components/Dashboard';
-// MODIFICATION: Import the new parent ShiftManagement component
+// Import the new parent ShiftManagement component
 import ShiftManagement from './components/ShiftManagement';
 import TimeClock from './components/TimeClock';
 import MyTraining from './components/MyTraining';
 import Branding from './components/Branding';
 import ClassClock from './components/ClassClock';
 
+// --- ADD IMPORTS FOR NEW SCHEDULING COMPONENTS ---
+import MySchedule from './components/MySchedule';
+import HelpUsOut from './components/HelpUsOut';
+// Note: ShiftManagement is already imported above
+
 import { generateClassPdf } from './utils/pdfGenerator';
-import { LayoutDashboard, ClipboardList, Library, Shield, Calendar } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, Library, Shield, Calendar, HelpingHand, UserCheck } from 'lucide-react'; // Added new icons
 
 export default function App() {
     const [user, setUser] = useState(null);
     const [isAuthLoading, setIsAuthLoading] = useState(true);
-    const [branding, setBranding] = useState({ 
-        siteLogo: null, 
-        logos: [], 
-        mainTitle: 'Training & Scheduling Attendance Management', 
+    const [branding, setBranding] = useState({
+        siteLogo: null,
+        logos: [],
+        mainTitle: 'Training & Scheduling Attendance Management',
         loginTitle: 'Welcome',
         primary: '#052D39',
         primaryHover: '#b13710',
         accent: '#052D39',
         accentHover: '#b13710',
     });
-    
+
     const [stations, setStations] = useState([]);
     const [classes, setClasses] = useState([]);
     const [waivers, setWaivers] = useState([]);
@@ -78,7 +83,7 @@ export default function App() {
             if (authUser) {
                 const unsubUser = onSnapshot(doc(db, "users", authUser.uid), (userDoc) => {
                     if (!userDoc.exists()) {
-                        return; 
+                        return;
                     }
 
                     const userData = userDoc.data();
@@ -123,7 +128,7 @@ export default function App() {
                 setter(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             }, (err) => console.error(`Failed to load ${name}:`, err));
         });
-        
+
         return () => unsubscribers.forEach(unsub => unsub());
     }, [user, isAuthLoading, isTimeClockView, isClassClockView]);
 
@@ -134,7 +139,7 @@ export default function App() {
         classes.forEach(c => { if (c.leadInstructorId === user.uid) assignments.push({ ...c, type: 'class', id: c.id, name: `${c.name} (Lead)` }); });
         return assignments;
     }, [stations, classes, user]);
-    
+
     const usersForApproval = useMemo(() => {
         return allUsers.filter(u => u.needsApproval);
     }, [allUsers]);
@@ -146,20 +151,20 @@ export default function App() {
             needsApproval: false
         });
     };
-    
+
     const handleSignOut = () => { setView('dashboard'); signOut(auth); };
-    const handleNavClick = (mainView, sub = '') => { 
-        setView(mainView); 
+    const handleNavClick = (mainView, sub = '') => {
+        setView(mainView);
         setSubView(sub);
     };
-    
+
     const handleConfirm = () => {
         if (confirmAction && typeof confirmAction.action === 'function') {
             confirmAction.action();
         }
         setConfirmAction(null);
     };
-    
+
     const handlePrerequisiteCheckin = async (course) => {
         const todayISO = new Date().toISOString().split('T')[0];
         const checkInData = {
@@ -229,7 +234,7 @@ export default function App() {
             return;
         }
 
-        const activeEntryQuery = isGuest 
+        const activeEntryQuery = isGuest
             ? query(collection(db, `artifacts/${appId}/public/data/timeClockEntries`), where("name", "==", name), where("agency", "==", agency), where("clockOutTime", "==", null))
             : query(collection(db, `artifacts/${appId}/public/data/timeClockEntries`), where("userId", "==", userId), where("clockOutTime", "==", null));
 
@@ -241,7 +246,7 @@ export default function App() {
             });
         }
     };
-    
+
     const handleClassCheckIn = async (attendee, course, station) => {
         const todayISO = new Date().toISOString().split('T')[0];
         const checkInData = {
@@ -271,7 +276,7 @@ export default function App() {
     if (isTimeClockView) {
         return <TimeClock users={allUsers} timeClockEntries={timeClockEntries} onClockIn={handleClockIn} onClockOut={handleClockOut} branding={branding} timeClocks={timeClocks} />;
     }
-    
+
     if (isClassClockView) {
         return <ClassClock users={allUsers} classes={classes} stations={stations} dailyCheckIns={dailyCheckIns} handleClassCheckIn={handleClassCheckIn} handleClassCheckOut={handleClassCheckOut} branding={branding} timeClocks={timeClocks} />;
     }
@@ -280,11 +285,11 @@ export default function App() {
     if (!user) {
         return <AuthComponent logoUrl={branding.siteLogo} loginTitle={branding.loginTitle} authMessage={loginMessage} setAuthMessage={setLoginMessage} />;
     }
-    
+
     const isInstructor = user.isAdmin || INSTRUCTOR_ROLES.includes(user.role);
     const isSupport = SUPPORT_ROLES.includes(user.role);
     const isPatrolLeadership = user.isAdmin || PATROL_LEADER_ROLES.includes(user.ability);
-    const hasSchedulingAccess = user.isAdmin || user.allowScheduling; 
+    const hasSchedulingAccess = user.isAdmin || user.allowScheduling;
 
     const renderContent = () => {
         const enrolledClassesDetails = classes.filter(c => user.enrolledClasses?.includes(c.id));
@@ -295,51 +300,64 @@ export default function App() {
         switch (view) {
             case 'admin': return <AdminPortal {...{ currentUser: user, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser: handleApproveUser, branding }} />;
             case 'siteBranding': return <div className="p-4 sm:p-6 lg:p-8"><Branding branding={branding} onUpdate={setBranding} /></div>;
-            case 'myTraining': 
-                return <MyTraining {...{ 
-                    user, 
+            case 'myTraining':
+                return <MyTraining {...{
+                    user,
                     enrolledClassesDetails,
                     dailyCheckIns,
                     setActiveClassId,
                     handlePrerequisiteCheckin,
                     handleCancelEnrollment,
-                    allUsers, 
-                    classes, 
-                    stations, 
-                    checkIns, 
-                    generateClassPdf 
+                    allUsers,
+                    classes,
+                    stations,
+                    checkIns,
+                    generateClassPdf
                 }} />;
             case 'attendance': return <AttendanceTabs {...{ user, allUsers, classes, stations, attendanceRecords, subView, setSubView }} />;
             case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: handleEnroll, enrollmentError, branding }} />;
             case 'profile': return <ProfileManagement {...{ user, setConfirmAction }} />;
-            // --- MODIFICATION: This case now renders the new ShiftManagement component ---
-            case 'scheduling': 
-                return hasSchedulingAccess 
-                    ? <ShiftManagement 
-                        currentUser={user} 
-                        allUsers={allUsers} 
-                        shifts={shifts} 
-                        // Assuming 'patrols' comes from one of your collections, if not it needs to be fetched
-                        patrols={stations.filter(s => s.type === 'patrol')} // Example: deriving patrols from stations
-                      /> 
-                    : <div>Access Denied</div>;
+            
+            // --- NEW CASES FOR SCHEDULING VIEWS ---
+            case 'mySchedule':
+                return <MySchedule 
+                    currentUser={user}
+                    allUsers={allUsers}
+                    shifts={shifts}
+                />;
+            case 'helpUsOut':
+                return <HelpUsOut
+                    currentUser={user}
+                    allUsers={allUsers}
+                    shifts={shifts}
+                    timeClockEntries={timeClockEntries}
+                />;
+            case 'scheduleManagement':
+                return isPatrolLeadership 
+                    ? <ShiftManagement
+                        currentUser={user}
+                        allUsers={allUsers}
+                        patrols={stations.filter(s => s.type === 'patrol')}
+                      />
+                    : <div>Access Denied. You do not have permission to manage schedules.</div>;
+
             case 'dashboard':
             default:
-                return <Dashboard {...{ 
-                    user, 
+                return <Dashboard {...{
+                    user,
                     isInstructor,
                     isStudent: !isInstructor && !isSupport,
-                    enrolledClassesDetails, 
+                    enrolledClassesDetails,
                     dailyCheckIns,
-                    setActiveClassId, 
+                    setActiveClassId,
                     handlePrerequisiteCheckin,
                     handleCancelEnrollment,
-                    myAssignments, 
-                    attendanceRecords, 
-                    classes, 
-                    paginatedPendingActions: [], 
-                    setPendingActionsPage: () => {}, 
-                    pendingActionsPage: 0, 
+                    myAssignments,
+                    attendanceRecords,
+                    classes,
+                    paginatedPendingActions: [],
+                    setPendingActionsPage: () => {},
+                    pendingActionsPage: 0,
                     allPendingActions: [],
                     timeClockEntries,
                     allUsers,
@@ -368,12 +386,25 @@ export default function App() {
                             <button onClick={handleSignOut} className="text-sm font-medium text-accent hover:text-accent-hover">Sign Out</button>
                         </div>
                     </div>
+                    {/* --- UPDATED NAVIGATION BAR --- */}
                     <nav className="flex space-x-4 border-t border-gray-200 -mb-px overflow-x-auto">
                         <button onClick={() => handleNavClick('dashboard')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'dashboard' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><LayoutDashboard className="mr-1.5 h-4 w-4" />My Dashboard</button>
-                        {hasSchedulingAccess && <button onClick={() => handleNavClick('scheduling')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'scheduling' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Calendar className="mr-1.5 h-4 w-4" />My Schedule</button>}
+                        
+                        {/* New "My Schedule" Tab */}
+                        <button onClick={() => handleNavClick('mySchedule')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'mySchedule' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Calendar className="mr-1.5 h-4 w-4" />My Schedule</button>
+                        
+                        {/* New "Help Us Out" Tab */}
+                        <button onClick={() => handleNavClick('helpUsOut')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'helpUsOut' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><HelpingHand className="mr-1.5 h-4 w-4" />Help Us Out!</button>
+
                         <button onClick={() => handleNavClick('myTraining')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'myTraining' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Library className="mr-1.5 h-4 w-4" />My Training</button>
+                        
                         {isInstructor && (<button onClick={() => handleNavClick('attendance', 'checkInOut')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'attendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ClipboardList className="mr-1.5 h-4 w-4" />Attendance Management</button>)}
+                        
                         <button onClick={() => handleNavClick('catalog')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'catalog' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Library className="mr-1.5 h-4 w-4" />Course Catalog</button>
+                        
+                        {/* Restricted "Schedule Management" Tab */}
+                        {isPatrolLeadership && <button onClick={() => handleNavClick('scheduleManagement')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'scheduleManagement' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserCheck className="mr-1.5 h-4 w-4" />Schedule Management</button>}
+
                         {user.isAdmin && <button onClick={() => handleNavClick('admin')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'admin' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Shield className="mr-1.5 h-4 w-4" />Admin Portal</button>}
                     </nav>
                 </div>
@@ -392,3 +423,4 @@ export default function App() {
         </div>
     );
 }
+

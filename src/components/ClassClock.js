@@ -1,267 +1,211 @@
-// src/components/ClassClock.js
-import React, { useState, useMemo, useEffect } from 'react';
-import { LogIn, LogOut, ArrowLeft, Send } from 'lucide-react';
-import { INSTRUCTOR_ROLES, SUPPORT_ROLES } from '../constants';
+import React, { useState, useMemo } from 'react';
+import { Clock, ArrowLeft } from 'lucide-react';
 
-const PinPad = ({ onPinChange, pin, pinLength = 4 }) => {
-    // ... (PinPad component remains the same)
-    const handleButtonClick = (num) => {
-        if (pin.length < pinLength) {
-            onPinChange(pin + num);
+const PinPad = ({ onPinSubmit, onPinChange, pin, disabled }) => {
+    const buttons = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
+
+    const handleButtonClick = (value) => {
+        if (disabled) return;
+        if (value === '⌫') {
+            onPinChange(pin.slice(0, -1));
+        } else if (pin.length < 4) {
+            onPinChange(pin + value);
         }
     };
-    const handleBackspace = () => { onPinChange(pin.slice(0, -1)); };
-    const handleClear = () => { onPinChange(''); };
-    const buttons = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'];
 
     return (
-        <div className="w-full max-w-xs mx-auto">
+        <div className={`w-full max-w-xs mx-auto ${disabled ? 'opacity-50' : ''}`}>
             <div className="grid grid-cols-3 gap-2">
-                {buttons.map((btn) => (
+                {buttons.map((btn, i) => (
                     <button
+                        key={i}
                         type="button"
-                        key={btn}
-                        onClick={() => {
-                            if (btn === 'C') handleClear();
-                            else if (btn === '⌫') handleBackspace();
-                            else handleButtonClick(btn);
-                        }}
-                        className="p-4 text-xl font-bold bg-gray-200 rounded-lg hover:bg-gray-300 aspect-square"
+                        onClick={() => handleButtonClick(btn)}
+                        disabled={!btn || disabled}
+                        className={`h-16 text-2xl font-semibold rounded-lg transition-colors ${
+                            btn ? 'bg-gray-200 hover:bg-gray-300' : 'bg-transparent'
+                        }`}
                     >
                         {btn}
                     </button>
                 ))}
             </div>
+            <button
+                type="button"
+                onClick={() => onPinSubmit(pin)}
+                disabled={disabled || pin.length !== 4}
+                className="w-full mt-4 h-14 bg-green-500 text-white text-lg font-bold rounded-lg hover:bg-green-600 disabled:bg-gray-400"
+            >
+                Submit
+            </button>
         </div>
     );
 };
 
-const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckIn, handleClassCheckOut, branding, timeClocks }) => {
-    const [view, setView] = useState('deviceLogin');
-    const [devicePinInput, setDevicePinInput] = useState('');
-    const [deviceLoginError, setDeviceLoginError] = useState('');
-    const [loggedInDeviceName, setLoggedInDeviceName] = useState('');
 
+const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckIn, handleClassCheckOut, branding }) => {
+    const [selectedCourse, setSelectedCourse] = useState(null);
+    const [selectedStation, setSelectedStation] = useState(null);
     const [selectedUser, setSelectedUser] = useState(null);
-    const [pinInput, setPinInput] = useState('');
-    const [error, setError] = useState('');
-    const [message, setMessage] = useState(''); // Added for success messages
-    const todayISO = new Date().toISOString().split('T')[0];
+    const [pin, setPin] = useState('');
 
-    const resetClockState = () => {
-        setSelectedUser(null);
-        setPinInput('');
-        setError('');
-        setMessage('');
-        setView('userSelect');
-    };
+    const activeStations = useMemo(() => {
+        if (!selectedCourse) return [];
+        return stations.filter(s => s.classId === selectedCourse.id);
+    }, [selectedCourse, stations]);
+    
+    const attendees = useMemo(() => {
+        if (!selectedCourse) return [];
+        const enrolledUserIds = new Set(
+            users.filter(u => u.enrolledClasses?.includes(selectedCourse.id)).map(u => u.id)
+        );
+        const instructorIds = new Set(selectedCourse.leadInstructorIds || []);
+        
+        return users.filter(u => enrolledUserIds.has(u.id) || instructorIds.has(u.id))
+            .map(u => ({...u, isInstructor: instructorIds.has(u.id)}));
 
-    useEffect(() => {
-        let timer;
-        if (message.includes('successfully')) {
-            timer = setTimeout(() => {
-                resetClockState();
-            }, 5000); // 5 seconds
+    }, [selectedCourse, users]);
+    
+    const handlePinSubmit = (submittedPin) => {
+        if (!selectedUser) {
+            alert("Please select your name first.");
+            setPin('');
+            return;
         }
-        return () => clearTimeout(timer);
-    }, [message]);
 
+        if (selectedUser.pin !== submittedPin) {
+            alert("Invalid PIN. Please try again.");
+            setPin('');
+            return;
+        }
 
-    const handleDeviceLogin = (e) => {
-        e.preventDefault();
-        setDeviceLoginError('');
-        const validDevice = timeClocks.find(device => device.pin === devicePinInput && device.type === 'Class Clock');
-        if (validDevice) {
-            setLoggedInDeviceName(validDevice.name);
-            setView('userSelect');
+        const activeCheckIn = dailyCheckIns.find(ci => ci.userId === selectedUser.uid && ci.stationId === selectedStation.id && !ci.checkOutTime);
+
+        if (activeCheckIn) {
+            handleClassCheckOut(activeCheckIn.id);
+            alert(`${selectedUser.firstName} checked out successfully from ${selectedStation.name}.`);
         } else {
-            setDeviceLoginError('Invalid Class Clock PIN. Please try again.');
+            handleClassCheckIn(selectedUser, selectedCourse, selectedStation);
+            alert(`${selectedUser.firstName} checked in successfully to ${selectedStation.name}.`);
         }
-        setDevicePinInput('');
+
+        // Reset for the next person
+        setSelectedUser(null);
+        setPin('');
     };
     
-    const userGroups = useMemo(() => {
-        const students = users.filter(u => u.role === 'Student');
-        const instructors = users.filter(u => INSTRUCTOR_ROLES.includes(u.role));
-        const support = users.filter(u => SUPPORT_ROLES.includes(u.role));
-        return { students, instructors, support };
-    }, [users]);
-
-    const enrolledClasses = useMemo(() => {
-        if (!selectedUser) return [];
-        return classes.filter(c => selectedUser.enrolledClasses?.includes(c.id));
-    }, [selectedUser, classes]);
-
-    const userCheckIns = useMemo(() => {
-        if (!selectedUser) return [];
-        return dailyCheckIns.filter(ci => ci.studentId === selectedUser.uid && ci.checkInDate === todayISO && !ci.checkOutTime);
-    }, [selectedUser, dailyCheckIns, todayISO]);
-
-
     const handleUserSelect = (userId) => {
         const user = users.find(u => u.id === userId);
         setSelectedUser(user);
-        setView('pin');
-        setError('');
+        setPin(''); // Clear pin when a new user is selected
     };
 
-    const handlePinValidate = () => {
-        if (selectedUser && selectedUser.timeClockPin === pinInput) {
-            if (userCheckIns.length > 0) {
-                setView('checkedInList');
-            } else {
-                setView('stationSelect');
-            }
-            setError('');
-        } else {
-            setError('Invalid PIN. Please try again.');
-        }
-        setPinInput('');
-    };
+    // --- Main Rendering Logic ---
+
+    // Step 1: Course Selection (Original Logic)
+    if (!selectedCourse) {
+        return (
+            <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
+                <div className="w-full max-w-lg text-center">
+                    {branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="mx-auto h-24 mb-6" />}
+                    <h1 className="text-3xl font-bold text-gray-800 mb-6">Select Your Course</h1>
+                    <div className="space-y-3">
+                        {classes.filter(c => !c.isCompleted).map(course => (
+                            <button
+                                key={course.id}
+                                onClick={() => setSelectedCourse(course)}
+                                className="w-full text-left p-4 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow"
+                            >
+                                <p className="text-lg font-semibold text-gray-900">{course.name}</p>
+                                <p className="text-sm text-gray-500">{course.startDate}</p>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
     
-    const handleBack = () => {
-        setSelectedUser(null);
-        setPinInput('');
-        setError('');
-        setView('userSelect');
-    };
+    // Step 2: Station Selection (Original Logic)
+    if (!selectedStation) {
+         return (
+            <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
+                 <div className="w-full max-w-lg text-center">
+                    <button onClick={() => setSelectedCourse(null)} className="absolute top-6 left-6 flex items-center text-sm text-gray-600 hover:text-gray-900">
+                        <ArrowLeft size={16} className="mr-1" /> Back to Courses
+                    </button>
+                    {branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="mx-auto h-24 mb-2" />}
+                    <h1 className="text-3xl font-bold text-gray-800 mb-2">Select Your Station</h1>
+                    <p className="text-md text-gray-600 mb-6">Course: {selectedCourse.name}</p>
+                     <div className="space-y-3">
+                         {activeStations.map(station => (
+                             <button
+                                 key={station.id}
+                                 onClick={() => setSelectedStation(station)}
+                                 className="w-full text-left p-4 bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow"
+                            >
+                                <p className="text-lg font-semibold text-gray-900">{station.name}</p>
+                             </button>
+                         ))}
+                    </div>
+                 </div>
+            </div>
+         );
+    }
 
-    const onCheckIn = (user, course, station) => {
-        handleClassCheckIn(user, course, station);
-        setMessage(`${user.firstName} checked in successfully!`);
-    };
+    // Step 3: COMBINED User Selection + Pin Pad View
+    return (
+        <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 sm:p-8">
+                <div className="flex items-center mb-6">
+                    <button onClick={() => setSelectedStation(null)} className="p-2 rounded-full hover:bg-gray-100">
+                        <ArrowLeft size={20} className="text-gray-600" />
+                    </button>
+                    <div className="ml-4 text-left">
+                        <h1 className="text-2xl font-bold text-gray-800">{selectedStation.name}</h1>
+                        <p className="text-sm text-gray-500">{selectedCourse.name}</p>
+                    </div>
+                </div>
 
-    const onCheckOut = (checkInId) => {
-        handleClassCheckOut(checkInId);
-        setMessage(`${selectedUser.firstName} checked out successfully!`);
-    };
+                {/* Name Selection (from original code) */}
+                <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">1. Select Your Name</label>
+                    <select
+                        value={selectedUser?.id || ''}
+                        onChange={(e) => handleUserSelect(e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="">-- Please select your name --</option>
+                        {attendees.map(attendee => (
+                            <option key={attendee.id} value={attendee.id}>
+                                {attendee.firstName} {attendee.lastName} {attendee.isInstructor && '(Instructor)'}
+                            </option>
+                        ))}
+                    </select>
+                </div>
 
-    const renderView = () => {
-        switch (view) {
-            case 'deviceLogin':
-                return (
-                     <form onSubmit={handleDeviceLogin} className="w-full max-w-sm bg-white rounded-xl shadow-lg p-8 space-y-6">
-                        <div className="flex justify-center mb-4">
-                            {branding && branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="h-20 w-auto" />}
-                        </div>
-                        <h1 className="text-2xl font-bold text-center text-gray-800">Class Clock Login</h1>
-                        {deviceLoginError && <p className="text-center text-red-500 bg-red-50 p-3 rounded-lg">{deviceLoginError}</p>}
+                {/* Pin Input and Pad */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        2. Enter Your 4-Digit PIN {selectedUser && `for ${selectedUser.firstName}`}
+                    </label>
+                    <div className="w-full max-w-xs mx-auto text-center mb-4">
                         <input
                             type="password"
-                            value={devicePinInput}
-                            onChange={(e) => setDevicePinInput(e.target.value)}
-                            placeholder="Enter 10-Digit PIN"
-                            className="w-full px-4 py-3 border rounded-lg text-center tracking-widest text-xl"
-                            maxLength="10"
-                            autoFocus
+                            readOnly
+                            value={pin}
+                            className="w-48 tracking-[1em] text-center text-3xl bg-gray-100 border-2 rounded-lg p-2"
+                            placeholder="● ● ● ●"
                         />
-                        <PinPad onPinChange={setDevicePinInput} pin={devicePinInput} pinLength={10} />
-                         <button type="submit" className="w-full py-3 text-white bg-primary hover:bg-primary-hover rounded-lg flex items-center justify-center font-semibold">
-                            <LogIn className="h-5 w-5 mr-2" />
-                            Login Device
-                        </button>
-                    </form>
-                );
-            case 'userSelect':
-                return (
-                    <div className="space-y-4">
-                        <h2 className="text-2xl font-bold text-center">Select Your Name</h2>
-                        <select onChange={(e) => handleUserSelect(e.target.value)} defaultValue="" className="w-full px-4 py-3 border rounded-lg">
-                            <option value="" disabled>-- Please Select --</option>
-                            <optgroup label="Students">
-                                {userGroups.students.map(u => (<option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>))}
-                            </optgroup>
-                             <optgroup label="Instructors">
-                                {userGroups.instructors.map(u => (<option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>))}
-                            </optgroup>
-                             <optgroup label="Support">
-                                {userGroups.support.map(u => (<option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>))}
-                            </optgroup>
-                        </select>
                     </div>
-                );
-            case 'pin':
-                return (
-                    <div className="space-y-4">
-                        <button onClick={handleBack} className="flex items-center text-sm text-accent hover:text-accent-hover"><ArrowLeft className="h-4 w-4 mr-1"/>Back</button>
-                        <h2 className="text-2xl font-bold text-center">Welcome, {selectedUser.firstName}</h2>
-                        <p className="text-center text-gray-500">Please enter your PIN</p>
-                        <input 
-                            type="password" 
-                            value={pinInput} 
-                            onChange={(e) => setPinInput(e.target.value)}
-                            maxLength="4"
-                            className="w-full px-4 py-3 border rounded-lg text-center tracking-widest text-xl" 
-                        />
-                        <PinPad onPinChange={setPinInput} pin={pinInput} />
-                        <button onClick={handlePinValidate} className="w-full py-3 text-white bg-primary hover:bg-primary-hover rounded-lg font-semibold flex items-center justify-center">
-                            <LogIn className="h-5 w-5 mr-2"/>Continue
-                        </button>
-                    </div>
-                );
-            case 'stationSelect':
-                 return (
-                    <div className="space-y-4">
-                        <button onClick={handleBack} className="flex items-center text-sm text-accent hover:text-accent-hover"><ArrowLeft className="h-4 w-4 mr-1"/>Back</button>
-                        <h2 className="text-2xl font-bold">Check In to a Station</h2>
-                        <div className="space-y-4 max-h-96 overflow-y-auto">
-                        {enrolledClasses.map(cls => (
-                            <div key={cls.id} className="p-4 border rounded-lg">
-                                <h3 className="font-bold text-lg">{cls.name}</h3>
-                                <ul className="mt-2 space-y-2">
-                                    {stations.filter(s => s.classId === cls.id).map(station => (
-                                        <li key={station.id} className="flex justify-between items-center bg-gray-50 p-3 rounded-md">
-                                            <span>{station.name}</span>
-                                            <button onClick={() => onCheckIn(selectedUser, cls, station)} className="px-4 py-2 text-sm text-white bg-green-600 hover:bg-green-700 rounded-lg font-semibold flex items-center">
-                                                <Send className="h-4 w-4 mr-1"/> Check In
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        ))}
-                        </div>
-                    </div>
-                );
-            case 'checkedInList':
-                 return (
-                    <div className="space-y-4">
-                        <button onClick={handleBack} className="flex items-center text-sm text-accent hover:text-accent-hover"><ArrowLeft className="h-4 w-4 mr-1"/>Back</button>
-                        <h2 className="text-2xl font-bold">Check Out of a Station</h2>
-                         <ul className="mt-2 space-y-2">
-                            {userCheckIns.map(ci => {
-                                const station = stations.find(s => s.id === ci.stationId);
-                                return (
-                                    <li key={ci.id} className="flex justify-between items-center bg-gray-50 p-3 rounded-md">
-                                        <span>{station ? station.name : 'Unknown Station'}</span>
-                                        <button onClick={() => onCheckOut(ci.id)} className="px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg font-semibold flex items-center">
-                                            <LogOut className="h-4 w-4 mr-1"/> Check Out
-                                        </button>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                    </div>
-                );
-            default:
-                return null;
-        }
-    };
-
-    return (
-         <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-             {view === 'deviceLogin' ? (
-                 renderView()
-             ) : (
-                 <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8">
-                     <div className="flex justify-center mb-6">
-                        {branding && branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="h-16 w-auto" />}
-                    </div>
-                    {error && <p className="text-center text-red-500 bg-red-50 p-3 rounded-lg mb-4">{error}</p>}
-                    {message && <p className="text-center text-green-500 bg-green-50 p-3 rounded-lg mb-4">{message}</p>}
-                    {renderView()}
+                    <PinPad 
+                        pin={pin} 
+                        onPinChange={setPin} 
+                        onPinSubmit={handlePinSubmit} 
+                        disabled={!selectedUser} 
+                    />
                 </div>
-             )}
+            </div>
         </div>
     );
 };

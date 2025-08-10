@@ -1,54 +1,32 @@
-// src/components/Scheduling.js
 import React, { useState, useMemo } from 'react';
-import { PATROLS, PATROL_ROLES } from '../constants';
+import { PATROL_ROLES } from '../constants';
 import { Check, UserPlus, X } from 'lucide-react';
 
-const Scheduling = ({ user, allUsers, shifts, timeClockEntries, onSignUp, onRequestSwap }) => {
-    const [scheduleView, setScheduleView] = useState('scheduled'); // scheduled, open, history
+/**
+ * This component powers the "Help Us Out!" main tab,
+ * allowing users to find open shifts or view their past shift history.
+ */
+const HelpUsOut = ({ currentUser, allUsers, shifts, timeClockEntries }) => {
+    const [scheduleView, setScheduleView] = useState('open'); // 'open' or 'history'
 
-    // FIX: Add a guard clause to prevent crashes if allUsers is not available.
     const getUserName = (userId) => {
         if (!Array.isArray(allUsers)) return 'N/A';
         const userFound = allUsers.find(u => u.id === userId);
         return userFound ? `${userFound.firstName} ${userFound.lastName}` : 'N/A';
     };
 
-    // Memoized list of the current user's scheduled shifts
-    const myScheduledShifts = useMemo(() => {
-        // FIX: Ensure 'shifts' is an array before calling .filter to prevent errors.
-        if (!Array.isArray(shifts) || !user?.id) return [];
-        
-        return shifts.filter(shift => {
-            // FIX: Use optional chaining (?.) for safer property access.
-            const isAssigned = shift.assignments?.some(a => a.userId === user.id);
-            const isLeader = shift.leaderId === user.id || shift.assistantLeaderId === user.id;
-            return isAssigned || isLeader;
-        });
-    }, [shifts, user?.id, allUsers]);
-
-    // Memoized list of open shifts
     const openShifts = useMemo(() => {
-        // FIX: Ensure 'shifts' is an array.
         if (!Array.isArray(shifts)) return [];
-
         const openSpots = [];
         shifts.forEach(shift => {
-            // Defensive checks for required shift properties
             if (!shift || !Array.isArray(shift.assignments)) return;
-
             const assignedUserIds = new Set(shift.assignments.map(a => a.userId));
             if (shift.leaderId) assignedUserIds.add(shift.leaderId);
             if (shift.assistantLeaderId) assignedUserIds.add(shift.assistantLeaderId);
-
             const requiredRoles = new Set(PATROL_ROLES.filter(r => r !== 'Guest Patroller'));
-
-            shift.assignments.forEach(a => {
-                requiredRoles.delete(a.role);
-            });
-            
+            shift.assignments.forEach(a => requiredRoles.delete(a.role));
             if (!shift.leaderId) requiredRoles.add('Patrol Shift Leader');
             if (!shift.assistantLeaderId) requiredRoles.add('Assistant Patrol Shift Leader');
-            
             if (requiredRoles.size > 0) {
                 openSpots.push({ ...shift, openRoles: Array.from(requiredRoles) });
             }
@@ -56,45 +34,32 @@ const Scheduling = ({ user, allUsers, shifts, timeClockEntries, onSignUp, onRequ
         return openSpots;
     }, [shifts]);
     
-    // Memoized shift history
     const shiftHistory = useMemo(() => {
-        // FIX: Rely on the already-safe myScheduledShifts and check timeClockEntries.
-        if (!Array.isArray(timeClockEntries) || !user?.id) return [];
+        if (!Array.isArray(shifts) || !Array.isArray(timeClockEntries) || !currentUser?.id) return [];
+        
+        const userShifts = shifts.filter(shift => {
+             const isAssigned = shift.assignments?.some(a => a.userId === currentUser.id);
+             const isLeader = shift.leaderId === currentUser.id || shift.assistantLeaderId === currentUser.id;
+             return isAssigned || isLeader;
+        });
 
-        return myScheduledShifts.map(shift => {
+        return userShifts.map(shift => {
             const entry = timeClockEntries.find(e => 
-                e.userId === user.id && 
-                e.clockInTime?.seconds && // Safely check for .seconds
+                e.userId === currentUser.id && 
+                e.clockInTime?.seconds &&
                 new Date(e.clockInTime.seconds * 1000).toDateString() === new Date(shift.date).toDateString()
             );
             return {
                 ...shift,
                 status: entry ? 'Attended' : 'Missed',
-                // FIX: Use optional chaining for safer access to time properties.
                 clockIn: entry?.clockInTime?.seconds ? new Date(entry.clockInTime.seconds * 1000).toLocaleTimeString() : 'N/A',
                 clockOut: entry?.clockOutTime?.seconds ? new Date(entry.clockOutTime.seconds * 1000).toLocaleTimeString() : 'N/A'
             };
         });
-    }, [myScheduledShifts, timeClockEntries, user?.id]);
-
+    }, [shifts, timeClockEntries, currentUser?.id]);
 
     const renderContent = () => {
         switch (scheduleView) {
-            case 'scheduled':
-                return (
-                    <div>
-                        {myScheduledShifts.map(shift => (
-                            <div key={shift.id} className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
-                                <div className="p-5 bg-gray-50 border-b">
-                                    <h3 className="text-lg font-bold text-gray-800">{new Date(shift.date).toDateString()} - {shift.type}</h3>
-                                    <p className="text-sm text-gray-600">Patrol: {shift.patrol}</p>
-                                    <p className="text-sm text-gray-600">Leader: {getUserName(shift.leaderId)}, Assistant: {getUserName(shift.assistantLeaderId)}</p>
-                                </div>
-                            </div>
-                        ))}
-                        {myScheduledShifts.length === 0 && <p>You are not signed up for any upcoming shifts.</p>}
-                    </div>
-                );
             case 'open':
                 return (
                     <div>
@@ -164,7 +129,6 @@ const Scheduling = ({ user, allUsers, shifts, timeClockEntries, onSignUp, onRequ
         <div className="p-4 sm:p-6 lg:p-8">
             <div className="border-b border-gray-200 mb-6">
                 <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                    <button onClick={() => setScheduleView('scheduled')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${scheduleView === 'scheduled' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Scheduled Shifts</button>
                     <button onClick={() => setScheduleView('open')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${scheduleView === 'open' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Open Shifts</button>
                     <button onClick={() => setScheduleView('history')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${scheduleView === 'history' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>My Shift History</button>
                 </nav>
@@ -174,4 +138,4 @@ const Scheduling = ({ user, allUsers, shifts, timeClockEntries, onSignUp, onRequ
     );
 };
 
-export default Scheduling;
+export default HelpUsOut;
