@@ -41,15 +41,11 @@ const CreateIndividualShift = ({ allUsers, patrols }) => {
         setShiftData(prev => ({ ...prev, roles: newRoles }));
     };
 
-    // UPDATED: Users are now filtered by the selected patrol in addition to their role
+    // CORRECTED: User filtering no longer depends on the selected patrol.
     const eligibleUsers = useMemo(() => {
-        if (!selectedRole || !shiftData.patrolId) return [];
-        return allUsers.filter(user =>
-            user.ability === selectedRole &&
-            user.assignments &&
-            user.assignments[shiftData.patrolId]
-        );
-    }, [selectedRole, shiftData.patrolId, allUsers]);
+        if (!selectedRole) return [];
+        return allUsers.filter(user => user.ability === selectedRole);
+    }, [selectedRole, allUsers]);
 
     const handleAddAssignment = (userId) => {
         if (!userId || assignments.some(a => a.userId === userId)) return;
@@ -149,7 +145,7 @@ const CreateIndividualShift = ({ allUsers, patrols }) => {
                         </div>
                         <div>
                              <label htmlFor="user-assign" className="block text-sm font-medium text-gray-700">User</label>
-                            <select id="user-assign" onChange={e => handleAddAssignment(e.target.value)} disabled={!selectedRole || !shiftData.patrolId} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value="">
+                            <select id="user-assign" onChange={e => handleAddAssignment(e.target.value)} disabled={!selectedRole} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value="">
                                 <option value="">Select a User...</option>
                                 {eligibleUsers.map(user => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}
                             </select>

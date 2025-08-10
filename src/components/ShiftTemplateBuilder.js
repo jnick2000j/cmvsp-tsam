@@ -158,15 +158,11 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
         setTemplateData(prev => ({ ...prev, roles: newRoles }));
     };
 
-    // UPDATED: Users are now filtered by the selected patrol in addition to their role
+    // CORRECTED: User filtering no longer depends on the selected patrol.
     const eligibleUsersForAssignment = useMemo(() => {
-        if (!selectedRoleForAssignment || !templateData.patrol) return [];
-        return allUsers.filter(user =>
-            user.ability === selectedRoleForAssignment &&
-            user.assignments &&
-            user.assignments[templateData.patrol]
-        );
-    }, [selectedRoleForAssignment, templateData.patrol, allUsers]);
+        if (!selectedRoleForAssignment) return [];
+        return allUsers.filter(user => user.ability === selectedRoleForAssignment);
+    }, [selectedRoleForAssignment, allUsers]);
 
     const handleAddAssignment = (userId) => {
         if (!userId || !selectedRoleForAssignment) return;
@@ -304,7 +300,7 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
                                 </div>
                                 <div>
                                     <label htmlFor="user-assign" className="block text-sm font-medium text-gray-700">User</label>
-                                    <select id="user-assign" onChange={e => handleAddAssignment(e.target.value)} disabled={!selectedRoleForAssignment || !templateData.patrol} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value="">
+                                    <select id="user-assign" onChange={e => handleAddAssignment(e.target.value)} disabled={!selectedRoleForAssignment} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value="">
                                         <option value="">Select a User...</option>
                                         {eligibleUsersForAssignment.map(user => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}
                                     </select>
