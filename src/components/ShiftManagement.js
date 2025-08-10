@@ -3,7 +3,8 @@ import CreateIndividualShift from './CreateIndividualShift';
 import ShiftTemplateBuilder from './ShiftTemplateBuilder';
 
 const ShiftManagement = ({ currentUser, allUsers, patrols }) => {
-    const [activeTab, setActiveTab] = 'create');
+    // FIX: Replaced the incorrect string with the useState hook
+    const [activeTab, setActiveTab] = useState('create');
 
     const tabClass = (tabName) =>
         `px-4 py-2 font-medium text-sm rounded-t-lg ${
@@ -13,7 +14,6 @@ const ShiftManagement = ({ currentUser, allUsers, patrols }) => {
         }`;
 
     return (
-        // The main h1 title has been removed from this component
         <div className="p-4 sm:p-6">
             <div className="flex border-b border-gray-200">
                 <button className={tabClass('create')} onClick={() => setActiveTab('create')}>

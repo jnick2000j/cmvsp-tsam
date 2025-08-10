@@ -8,9 +8,9 @@ import UserEditModal from './UserEditModal';
 import StationEditModal from './StationEditModal';
 import ClassEditModal from './ClassEditModal';
 import WaiverManagement from './WaiverManagement';
-import ShiftManagement from './ShiftManagement';
+// import ShiftManagement from './ShiftManagement'; // REMOVED
 import TimeClockManagement from './TimeClockManagement';
-import { Search, Edit, Trash2, Layers, BookOpen, UserCog, FileSignature, Mail, Calendar, Smartphone, UserCheck, PlusCircle, Copy } from 'lucide-react';
+import { Search, Edit, Trash2, Layers, BookOpen, UserCog, FileSignature, Mail, Smartphone, UserCheck, PlusCircle, Copy } from 'lucide-react';
 import Icon from './Icon';
 
 const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser, branding }) => {
@@ -22,14 +22,14 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
     const [editingUser, setEditingUser] = useState(null);
     const [editingStation, setEditingStation] = useState(null);
     const [editingClass, setEditingClass] = useState(null);
-    const [shifts, setShifts] = useState([]);
+    // const [shifts, setShifts] = useState([]); // REMOVED
     const [timeClocks, setTimeClocks] = useState([]);
 
     useEffect(() => {
-        const shiftsQuery = query(collection(db, `artifacts/${appId}/public/data/shifts`), orderBy("date", "desc"));
-        const unsubscribeShifts = onSnapshot(shiftsQuery, (snapshot) => {
-            setShifts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        });
+        // const shiftsQuery = query(collection(db, `artifacts/${appId}/public/data/shifts`), orderBy("date", "desc")); // REMOVED
+        // const unsubscribeShifts = onSnapshot(shiftsQuery, (snapshot) => { // REMOVED
+        //     setShifts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); // REMOVED
+        // }); // REMOVED
 
         const timeClocksQuery = query(collection(db, `artifacts/${appId}/public/data/timeclocks`));
         const unsubscribeTimeClocks = onSnapshot(timeClocksQuery, (snapshot) => {
@@ -37,7 +37,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
         });
 
         return () => {
-            unsubscribeShifts();
+            // unsubscribeShifts(); // REMOVED
             unsubscribeTimeClocks();
         };
     }, []);
@@ -100,28 +100,6 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             }
         });
     };
-
-    const handleSaveShift = async (shiftData) => {
-        try {
-            if (shiftData.id) {
-                const shiftRef = doc(db, `artifacts/${appId}/public/data/shifts`, shiftData.id);
-                await setDoc(shiftRef, shiftData, { merge: true });
-            } else {
-                await addDoc(collection(db, `artifacts/${appId}/public/data/shifts`), shiftData);
-            }
-        } catch(err) {
-            console.error("Error saving shift:", err);
-        }
-    };
-
-    const handleDeleteShift = async (shiftId) => {
-         try {
-            await deleteDoc(doc(db, `artifacts/${appId}/public/data/shifts`, shiftId));
-        } catch(err) {
-            console.error("Error deleting shift:", err);
-        }
-    };
-
 
     const handleEditUser = (user) => { setEditingUser(user); setIsUserModalOpen(true); };
     const handleCloseUserModal = () => { setIsUserModalOpen(false); setEditingUser(null); };
@@ -196,7 +174,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         <button onClick={() => setAdminView('classes')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'classes' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Layers className="mr-2" size={18}/> Class Management</button>
                         <button onClick={() => setAdminView('stations')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'stations' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><BookOpen className="mr-2" size={18}/> Station Management</button>
                         <button onClick={() => setAdminView('users')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'users' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserCog className="mr-2" size={18}/> User Management</button>
-                        <button onClick={() => setAdminView('shifts')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'shifts' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Calendar className="mr-2" size={18}/> Shift Management</button>
+                        {/* <button onClick={() => setAdminView('shifts')} ... /> REMOVED */}
                         <button onClick={() => setAdminView('timeclocks')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'timeclocks' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Smartphone className="mr-2" size={18}/> Time Clock Devices</button>
                         <button onClick={() => setAdminView('waivers')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'waivers' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><FileSignature className="mr-2" size={18}/> Waiver Management</button>
                     </nav>
@@ -284,7 +262,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         </div>
                     </>
                 )}
-                {adminView === 'shifts' && <ShiftManagement shifts={shifts} users={allUsers} onSave={handleSaveShift} onDelete={handleDeleteShift} />}
+                {/* {adminView === 'shifts' && <ShiftManagement shifts={shifts} users={allUsers} onSave={handleSaveShift} onDelete={handleDeleteShift} />} REMOVED */}
                 {adminView === 'timeclocks' && <TimeClockManagement timeClocks={timeClocks} onSave={handleSaveTimeClock} onDelete={handleDeleteTimeClock} />}
                 {adminView === 'waivers' && <WaiverManagement waivers={waivers} setConfirmAction={setConfirmAction} />}
             </div>
