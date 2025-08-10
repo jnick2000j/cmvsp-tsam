@@ -2,16 +2,18 @@ import React, { useState, useMemo } from 'react';
 import { db } from '../firebaseConfig';
 import { doc, setDoc } from 'firebase/firestore';
 import { PlusCircle, Trash2, Save } from 'lucide-react';
-import { PATROL_ROLES, PATROL_LEADER_ROLES } from '../constants';
+// UPDATED: Import PATROLS directly from constants
+import { PATROL_ROLES, PATROL_LEADER_ROLES, PATROLS } from '../constants';
 
 const ALL_PATROL_ROLES = [...new Set([...PATROL_ROLES, ...PATROL_LEADER_ROLES])];
 
-const CreateIndividualShift = ({ allUsers, patrols }) => {
+// UPDATED: The 'patrols' prop is no longer needed as we import the list directly
+const CreateIndividualShift = ({ allUsers }) => {
     const [shiftData, setShiftData] = useState({
         date: '',
         startTime: '',
         stopTime: '',
-        patrolId: '',
+        patrol: '', // Changed from patrolId to patrol to store the string name
         roles: [{ name: '', target: 1 }],
     });
 
@@ -41,7 +43,6 @@ const CreateIndividualShift = ({ allUsers, patrols }) => {
         setShiftData(prev => ({ ...prev, roles: newRoles }));
     };
 
-    // CORRECTED: User filtering no longer depends on the selected patrol.
     const eligibleUsers = useMemo(() => {
         if (!selectedRole) return [];
         return allUsers.filter(user => user.ability === selectedRole);
@@ -58,12 +59,12 @@ const CreateIndividualShift = ({ allUsers, patrols }) => {
     };
     
     const handleSaveShift = async () => {
-        if (!shiftData.date || !shiftData.patrolId || !shiftData.startTime || !shiftData.stopTime) {
+        if (!shiftData.date || !shiftData.patrol || !shiftData.startTime || !shiftData.stopTime) {
             alert("Date, Patrol, Start Time, and Stop Time are required.");
             return;
         }
 
-        const shiftId = `${shiftData.patrolId}-${shiftData.date}`;
+        const shiftId = `${shiftData.patrol}-${shiftData.date}`;
         const shiftRef = doc(db, 'shifts', shiftId);
 
         try {
@@ -78,7 +79,7 @@ const CreateIndividualShift = ({ allUsers, patrols }) => {
                 date: '',
                 startTime: '',
                 stopTime: '',
-                patrolId: '',
+                patrol: '',
                 roles: [{ name: '', target: 1 }],
             });
             setAssignments([]);
@@ -100,9 +101,10 @@ const CreateIndividualShift = ({ allUsers, patrols }) => {
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Patrol</label>
-                        <select name="patrolId" value={shiftData.patrolId} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                        {/* UPDATED: This select now uses the imported PATROLS constant */}
+                        <select name="patrol" value={shiftData.patrol} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
                             <option value="">-- Select a Patrol --</option>
-                            {patrols.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            {PATROLS.map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
                     </div>
                     <div>

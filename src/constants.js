@@ -13,14 +13,20 @@ export const PATROL_ROLES = [
     'Safety Patroller',
     'Mountain Host',
     'Guest Patroller',
-    'Patrol Administration'
+    'Patrol Administration',
+    'Candidate'
 ];
 export const PATROLS = [
     'Patrol #1', 
     'Patrol #2', 
     'Patrol #3',
+    'Patrol #1 (Night Chair)', 
+    'Patrol #2 (Night Chair)', 
+    'Patrol #3 (Night Chair)',
     'Patrol Administration (Not Assigned)',
-    'Candidate (Not Assigned)'
+    'Candidate (Not Assigned)',
+    'Midweek (Not Assigned)',
+    'Holiday (Not Assigned)'
 ];
 export const MOUNTAIN_AREAS = [
     'Roaming/All Mountain',

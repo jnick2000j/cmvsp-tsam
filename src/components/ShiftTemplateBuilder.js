@@ -3,7 +3,8 @@ import { db, functions } from '../firebaseConfig';
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { PlusCircle, Trash2, Calendar, Save } from 'lucide-react';
-import { PATROL_ROLES, PATROL_LEADER_ROLES } from '../constants';
+// UPDATED: Import PATROLS directly from constants
+import { PATROL_ROLES, PATROL_LEADER_ROLES, PATROLS } from '../constants';
 
 const ALL_PATROL_ROLES = [...new Set([...PATROL_ROLES, ...PATROL_LEADER_ROLES])];
 
@@ -96,7 +97,8 @@ const RecurrenceEditor = ({ recurrence, setRecurrence }) => {
     );
 };
 
-const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
+// UPDATED: The 'patrols' prop is no longer needed
+const ShiftTemplateBuilder = ({ allUsers }) => {
     const [templates, setTemplates] = useState([]);
     const [selectedTemplate, setSelectedTemplate] = useState(null);
     const [templateData, setTemplateData] = useState({});
@@ -158,7 +160,6 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
         setTemplateData(prev => ({ ...prev, roles: newRoles }));
     };
 
-    // CORRECTED: User filtering no longer depends on the selected patrol.
     const eligibleUsersForAssignment = useMemo(() => {
         if (!selectedRoleForAssignment) return [];
         return allUsers.filter(user => user.ability === selectedRoleForAssignment);
@@ -252,9 +253,10 @@ const ShiftTemplateBuilder = ({ allUsers, patrols }) => {
                         
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Patrol</label>
+                            {/* UPDATED: This select now uses the imported PATROLS constant */}
                             <select name="patrol" value={templateData.patrol} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
                                 <option value="">-- Select a Patrol --</option>
-                                {patrols.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                {PATROLS.map(p => <option key={p} value={p}>{p}</option>)}
                             </select>
                         </div>
                         
