@@ -61,10 +61,16 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
     const [numGroups, setNumGroups] = useState(1);
     const [enrolledStudentsList, setEnrolledStudentsList] = useState([]);
     const [selectedStudent, setSelectedStudent] = useState('');
-
+    const [isEnrolling, setIsEnrolling] = useState(false);
 
     const allRoles = useMemo(() => ['Student', ...INSTRUCTOR_ROLES, ...SUPPORT_ROLES], []);
     
+    // **FIX: Moved this useMemo hook to the top level.**
+    const availableToEnroll = useMemo(() => {
+        const enrolledIds = new Set(enrolledStudentsList.map(s => s.id));
+        return allUsers.filter(user => !enrolledIds.has(user.id));
+    }, [allUsers, enrolledStudentsList]);
+
     const getInitialFormData = useCallback(() => ({
         name: '', 
         startDate: '', 
@@ -115,6 +121,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         }
     }, [classToEdit, isOpen, getInitialFormData, fetchEnrolledStudents]);
 
+    // Early return is now safe as all hooks are called above it.
     if (!isOpen) return null;
 
     const handleInputChange = (e) => {
@@ -176,7 +183,8 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                 enrolledClasses: arrayRemove(classToEdit.id)
             });
 
-            fetchEnrolledStudents(classToEdit.id);
+            // Immediately update the UI after unenrolling
+            setEnrolledStudentsList(prevList => prevList.filter(student => student.id !== studentId));
         } catch (error) {
             console.error("Error unenrolling student:", error);
             alert("An error occurred while unenrolling the student.");
@@ -185,27 +193,33 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
 
     const handleManualEnroll = async () => {
         if (!selectedStudent) {
-            alert("Please select a student to enroll.");
+            alert("Please select a user to enroll.");
             return;
         }
         if (!classToEdit?.id) {
-            alert("Cannot enroll student because the class has not been saved yet.");
+            alert("Cannot enroll a student until the class has been saved.");
             return;
         }
 
+        setIsEnrolling(true);
         const enrollStudentFn = httpsCallable(functions, 'enrollStudent');
         try {
             const result = await enrollStudentFn({ classId: classToEdit.id, studentId: selectedStudent });
             if (result.data.success) {
                 alert(result.data.message);
+                const newlyEnrolledStudent = allUsers.find(u => u.id === selectedStudent);
+                if (newlyEnrolledStudent) {
+                    setEnrolledStudentsList(prev => [...prev, newlyEnrolledStudent]);
+                }
                 setSelectedStudent('');
-                fetchEnrolledStudents(classToEdit.id);
             } else {
-                throw new Error(result.data.message);
+                throw new Error(result.data.message || 'An unknown error occurred.');
             }
         } catch (error) {
             console.error("Error enrolling student:", error);
             alert(`Enrollment failed: ${error.message}`);
+        } finally {
+            setIsEnrolling(false);
         }
     };
 
@@ -236,10 +250,11 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
             <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
                 <div className="p-6 border-b"><h2 className="text-2xl font-bold text-gray-800">{classToEdit ? 'Edit Class' : 'Add New Class'}</h2></div>
                 <div className="p-6 space-y-4 overflow-y-auto">
+                    {/* ... form fields ... */}
                     <div><label className="block text-sm font-medium text-gray-700">Class Name</label><input name="name" value={formData.name || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <div><label className="block text-sm font-medium text-gray-700">Start Date</label><input type="date" name="startDate" value={formData.startDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
-                         <div><label className="block text-sm font-medium text-gray-700">End Date</label><input type="date" name="endDate" value={formData.endDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
+                        <div><label className="block text-sm font-medium text-gray-700">Start Date</label><input type="date" name="startDate" value={formData.startDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
+                        <div><label className="block text-sm font-medium text-gray-700">End Date</label><input type="date" name="endDate" value={formData.endDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div><label className="block text-sm font-medium text-gray-700">Location</label><input name="location" value={formData.location || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
@@ -250,25 +265,27 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                     {classToEdit && canManageEnrollment && (
                         <div>
                             <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Manual Enrollment</h3>
-                             <div className="mt-2 p-4 border rounded-md bg-gray-50">
+                            <div className="mt-2 p-4 border rounded-md bg-gray-50">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Enroll a User</label>
                                 <div className="flex items-center space-x-2">
                                     <select 
                                         value={selectedStudent} 
                                         onChange={(e) => setSelectedStudent(e.target.value)} 
                                         className="flex-grow border-gray-300 rounded-md shadow-sm"
+                                        disabled={isEnrolling}
                                     >
                                         <option value="">-- Select a user to enroll --</option>
-                                        {allUsers.map(user => (
+                                        {availableToEnroll.map(user => (
                                             <option key={user.id} value={user.id}>{user.firstName} {user.lastName} ({user.email})</option>
                                         ))}
                                     </select>
                                     <button 
                                         type="button" 
                                         onClick={handleManualEnroll}
-                                        className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                                        disabled={isEnrolling || !selectedStudent}
+                                        className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-blue-300"
                                     >
-                                        Enroll User
+                                        {isEnrolling ? 'Enrolling...' : 'Enroll User'}
                                     </button>
                                 </div>
                             </div>
@@ -308,8 +325,8 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                     )}
 
                     <div>
-                         <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Support Needs</h3>
-                         <div className="space-y-3 mt-2">
+                        <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Support Needs</h3>
+                        <div className="space-y-3 mt-2">
                             {(formData.supportNeeds || []).map((need, index) => (
                                 <div key={need.id} className="p-3 border rounded-md bg-gray-50 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                     <div className="lg:col-span-3">
@@ -346,12 +363,12 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                                     </div>
                                 </div>
                             ))}
-                         </div>
-                         <button type="button" onClick={addSupportNeed} className="mt-3 flex items-center px-3 py-2 text-sm bg-green-100 text-green-800 rounded-md hover:bg-green-200">
-                            <PlusCircle size={16} className="mr-2" />
-                            Add Support Need
-                         </button>
-                    </div>
+                        </div>
+                        <button type="button" onClick={addSupportNeed} className="mt-3 flex items-center px-3 py-2 text-sm bg-green-100 text-green-800 rounded-md hover:bg-green-200">
+                           <PlusCircle size={16} className="mr-2" />
+                           Add Support Need
+                        </button>
+                   </div>
                 </div>
                 <div className="p-6 bg-gray-50 border-t flex justify-end space-x-3">
                     <button type="button" onClick={onClose} className="px-4 py-2 bg-white border rounded-md">Cancel</button>

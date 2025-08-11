@@ -2,7 +2,7 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
-const { RRule } = require('rrule'); // Assuming rrule is in your package.json
+const { RRule } = require('rrule');
 
 // Initialize the Firebase Admin SDK
 initializeApp();
@@ -26,7 +26,6 @@ exports.createUserAccount = onCall(async (request) => {
         });
     } catch (error) {
         console.error("Error creating new user:", error);
-        // Provides a more specific error message if the email is already in use.
         if (error.code === 'auth/email-already-exists') {
             throw new HttpsError("already-exists", "The email address is already in use by another account.");
         }
@@ -46,14 +45,14 @@ exports.createUserAccount = onCall(async (request) => {
         nspId: data.isOtherAffiliated ? data.nspId : "",
         isAffiliated: data.isCmspAffiliated,
         primaryAgency: data.isOtherAffiliated ? data.primaryAgency : (data.isCmspAffiliated ? "Crystal Mountain Ski Patrol" : ""),
-        role: "Student", // Default role for new users
+        role: "Student",
         isAdmin: false,
         allowScheduling: false,
         assignments: {},
         enrolledClasses: [],
         completedClasses: {},
         isApproved: false,
-        needsApproval: true, // New accounts require admin approval
+        needsApproval: true,
     };
 
     try {
@@ -61,7 +60,6 @@ exports.createUserAccount = onCall(async (request) => {
         return { status: "success", message: "User created successfully." };
     } catch (error) {
         console.error(`Error creating Firestore document for UID: ${userRecord.uid}`, error);
-        // If Firestore write fails, roll back the auth user creation to prevent orphaned accounts.
         await getAuth().deleteUser(userRecord.uid);
         throw new HttpsError("internal", "Failed to save user profile.");
     }
@@ -71,62 +69,134 @@ exports.createUserAccount = onCall(async (request) => {
  * Enrolls a student into a class, with permission checks for the calling user.
  */
 exports.enrollStudent = onCall(async (request) => {
+    const appId = process.env.APP_ID;
+    if (!appId) {
+        console.error("FATAL ERROR: The APP_ID environment variable is not set.");
+        throw new HttpsError('internal', 'The server is missing critical configuration.');
+    }
+    
     const { classId, studentId } = request.data;
     const uid = request.auth?.uid;
-    const appId = "cmvsp-tsam"; // Your specific app ID.
 
     if (!uid) {
         throw new HttpsError('unauthenticated', 'You must be logged in to perform this action.');
     }
 
+    if (!classId || !studentId) {
+        throw new HttpsError('invalid-argument', 'The "classId" and "studentId" arguments are required.');
+    }
+
     const db = getFirestore();
-    // **FIX:** The database path now correctly points to the nested 'classes' collection.
     const classRef = db.doc(`artifacts/${appId}/public/data/classes/${classId}`);
     const studentRef = db.collection('users').doc(studentId);
 
-    const callingUserDoc = await db.collection('users').doc(uid).get();
-    if (!callingUserDoc.exists) {
-        throw new HttpsError('not-found', 'Calling user record not found.');
-    }
-    const callingUserData = callingUserDoc.data();
-    const isAdmin = callingUserData.isAdmin === true;
-
-    const classDoc = await classRef.get();
-    if (!classDoc.exists) {
-        throw new HttpsError('not-found', 'The specified class could not be found.');
-    }
-
-    const classData = classDoc.data();
-    const isLeadInstructor = classData.leadInstructorId === uid;
-
-    // Only admins or the lead instructor of the class can enroll students.
-    if (!isAdmin && !isLeadInstructor) {
-        throw new HttpsError('permission-denied', 'You do not have permission to enroll students in this class.');
-    }
-
     try {
-        await classRef.collection('enrollments').doc(studentId).set({
+        const [callingUserDoc, classDoc, studentDoc] = await Promise.all([
+            db.collection('users').doc(uid).get(),
+            classRef.get(),
+            studentRef.get()
+        ]);
+
+        if (!callingUserDoc.exists) {
+            throw new HttpsError('not-found', 'Your user record could not be found.');
+        }
+        if (!classDoc.exists) {
+            console.error(`Class not found at path: artifacts/${appId}/public/data/classes/${classId}`);
+            throw new HttpsError('not-found', 'The specified class could not be found.');
+        }
+        if (!studentDoc.exists) {
+            throw new HttpsError('not-found', 'The specified student could not be found.');
+        }
+
+        const callingUserData = callingUserDoc.data();
+        const isAdmin = callingUserData.isAdmin === true;
+        const classData = classDoc.data();
+        const isLeadInstructor = classData.leadInstructorId === uid;
+
+        if (!isAdmin && !isLeadInstructor) {
+            throw new HttpsError('permission-denied', 'You do not have permission to enroll students in this class.');
+        }
+
+        const batch = db.batch();
+        const enrollmentRef = classRef.collection('enrollments').doc(studentId);
+        
+        batch.set(enrollmentRef, {
             enrolledAt: FieldValue.serverTimestamp(),
             enrolledBy: uid
         });
-
-        await studentRef.update({
+        batch.update(studentRef, {
             enrolledClasses: FieldValue.arrayUnion(classId)
         });
+
+        await batch.commit();
 
         return { success: true, message: 'Student enrolled successfully.' };
     } catch (error) {
         console.error("Error during enrollment transaction:", error);
+        if (error instanceof HttpsError) {
+            throw error;
+        }
         throw new HttpsError('internal', 'An error occurred while enrolling the student.');
     }
 });
 
+/**
+ * NEW FUNCTION: Allows a logged-in user to enroll themselves in a class.
+ */
+exports.selfEnroll = onCall(async (request) => {
+    const appId = process.env.APP_ID;
+    if (!appId) {
+        console.error("FATAL ERROR: The APP_ID environment variable is not set.");
+        throw new HttpsError('internal', 'The server is missing critical configuration.');
+    }
+
+    const { classId } = request.data;
+    const uid = request.auth?.uid; // The user enrolling themselves
+
+    if (!uid) {
+        throw new HttpsError('unauthenticated', 'You must be logged in to enroll.');
+    }
+    if (!classId) {
+        throw new HttpsError('invalid-argument', 'A "classId" is required.');
+    }
+
+    const db = getFirestore();
+    const classRef = db.doc(`artifacts/${appId}/public/data/classes/${classId}`);
+    const studentRef = db.doc(`users/${uid}`);
+
+    try {
+        const classDoc = await classRef.get();
+        if (!classDoc.exists || classDoc.data().isHidden) {
+            throw new HttpsError('not-found', 'This class is not available for enrollment.');
+        }
+
+        const batch = db.batch();
+        const enrollmentRef = classRef.collection('enrollments').doc(uid);
+
+        batch.set(enrollmentRef, {
+            enrolledAt: FieldValue.serverTimestamp(),
+            enrolledBy: uid // The user enrolled themselves
+        });
+        batch.update(studentRef, {
+            enrolledClasses: FieldValue.arrayUnion(classId)
+        });
+
+        await batch.commit();
+
+        return { success: true, message: 'You have been successfully enrolled in the class!' };
+
+    } catch (error) {
+        console.error(`Error during self-enrollment for user ${uid} in class ${classId}:`, error);
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+        throw new HttpsError('internal', 'An unexpected error occurred during enrollment.');
+    }
+});
 
 /**
  * Deletes a user's account from Firebase Authentication when their corresponding
  * document is deleted from the 'users' collection in Firestore.
- * NOTE: This uses 1st Gen syntax because 2nd Gen does not yet support Firestore triggers
- * in the same way. This is a common and acceptable pattern.
  */
 const functions = require("firebase-functions");
 exports.deleteUserAccount = functions.firestore
@@ -142,12 +212,8 @@ exports.deleteUserAccount = functions.firestore
         }
     });
 
-
 // Placeholder for the applyShiftTemplate function if you need it.
-// You would convert its logic to the 2nd Gen `onCall` syntax as well.
 exports.applyShiftTemplate = onCall(async (request) => {
-    // ... existing applyShiftTemplate code converted to 2nd Gen ...
-    // For now, this is a placeholder.
     console.log("applyShiftTemplate called with data:", request.data);
     return { status: "pending", message: "Function not fully implemented." };
 });
