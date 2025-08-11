@@ -70,30 +70,26 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         setMessage('');
         setView('login');
     }, []);
-
-    const currentUserCheckIn = useMemo(() => {
-        if (!selectedUser) return null;
-        return dailyCheckIns.find(ci => ci.userId === selectedUser.uid && ci.checkInDate === todayISO && !ci.checkOutTime);
+    
+    // **REVISED: More robust state detection for active check-ins.**
+    const activeCheckIns = useMemo(() => {
+        if (!selectedUser) return [];
+        return dailyCheckIns.filter(ci => ci.userId === selectedUser.uid && ci.checkInDate === todayISO && !ci.checkOutTime);
     }, [selectedUser, dailyCheckIns, todayISO]);
 
+    const activeClassCheckIn = useMemo(() => activeCheckIns.find(ci => ci.classId && !ci.stationId), [activeCheckIns]);
+    const activeStationCheckIn = useMemo(() => activeCheckIns.find(ci => ci.stationId), [activeCheckIns]);
+
     useEffect(() => {
-        if (activityTimeoutRef.current) {
-            clearTimeout(activityTimeoutRef.current);
-        }
+        if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
 
         if (view === 'class_selection' && selectedUser) {
             const timeoutDuration = 20000; // 20-second inactivity timeout
-            
-            activityTimeoutRef.current = setTimeout(() => {
-                console.log(`Inactivity timeout reached. Returning to login.`);
-                resetUser();
-            }, timeoutDuration);
+            activityTimeoutRef.current = setTimeout(resetUser, timeoutDuration);
         }
 
         return () => {
-            if (activityTimeoutRef.current) {
-                clearTimeout(activityTimeoutRef.current);
-            }
+            if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
         };
     }, [view, selectedUser, resetUser]);
 
@@ -121,7 +117,6 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         e.preventDefault();
         if (!selectedUser) {
             setMessage("Please select your name first.");
-            setUserPin('');
             return;
         }
         if (String(selectedUser.timeClockPin) !== userPin) {
@@ -146,30 +141,31 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         const course = classes.find(c => c.id === classId);
         try {
             await handleClassCheckIn(selectedUser, course, null);
-            setView('message');
-            setMessage(`Successfully clocked into class: ${course.name}.`);
-            setTimeout(resetUser, 5000); // 5-second delay
+            // The view will automatically update once the new check-in is detected.
+            // No need for an immediate message here, the action screen will guide them.
         } catch (error) {
             console.error("Failed to check into class:", error);
             setMessage("Error: Could not check into the class. Please try again.");
-            setTimeout(resetUser, 5000); // 5-second delay
+            setTimeout(resetUser, 5000);
         }
     };
 
     const handleStationSelect = async (stationId) => {
         if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
 
+        // Find the class the user is currently in
+        const currentClass = classes.find(c => c.id === activeClassCheckIn.classId);
         const station = stations.find(s => s.id === stationId);
-        const course = classes.find(c => c.id === station.classId);
+
         try {
-            await handleClassCheckIn(selectedUser, course, station);
-            setView('message');
-            setMessage(`Successfully checked into station: ${station.name}.`);
-            setTimeout(resetUser, 5000); // 5-second delay
+            // First, check out of the main class entry (which has no stationId)
+            await handleClassCheckOut(activeClassCheckIn.id);
+            // Then, check in specifically to the station.
+            await handleClassCheckIn(selectedUser, currentClass, station);
         } catch (error) {
             console.error("Failed to check into station:", error);
             setMessage("Error: Could not check into the station. Please try again.");
-            setTimeout(resetUser, 5000); // 5-second delay
+            setTimeout(resetUser, 5000);
         }
     };
 
@@ -177,14 +173,17 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
         
         try {
-            await handleClassCheckOut(currentUserCheckIn.id);
+            await handleClassCheckOut(activeStationCheckIn.id);
+            // After checking out of the station, check them back into the class's main record
+            const course = classes.find(c => c.id === activeStationCheckIn.classId);
+            await handleClassCheckIn(selectedUser, course, null);
             setView('message');
             setMessage(`Successfully checked out of station.`);
-            setTimeout(resetUser, 5000); // 5-second delay
+            setTimeout(() => setView('class_selection'), 2000); // Go back to station selection
         } catch (error) {
             console.error("Failed to check out of station:", error);
             setMessage("Error: Could not check out of the station. Please try again.");
-            setTimeout(resetUser, 5000); // 5-second delay
+            setTimeout(resetUser, 5000);
         }
     };
 
@@ -192,14 +191,17 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
         
         try {
-            await handleClassCheckOut(currentUserCheckIn.id);
+            // Check out of all active sessions for the user
+            for (const checkIn of activeCheckIns) {
+                await handleClassCheckOut(checkIn.id);
+            }
             setView('message');
             setMessage(`Successfully checked out of class.`);
-            setTimeout(resetUser, 5000); // 5-second delay
+            setTimeout(resetUser, 5000);
         } catch (error) {
             console.error("Failed to check out of class:", error);
             setMessage("Error: Could not check out of the class. Please try again.");
-            setTimeout(resetUser, 5000); // 5-second delay
+            setTimeout(resetUser, 5000);
         }
     };
 
@@ -283,58 +285,14 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
     );
 
     const renderActionScreen = () => {
-        if (!selectedUser) {
-            return <p>Please select a user.</p>;
-        }
+        if (!selectedUser) return <p>Please select a user.</p>;
 
-        if (!currentUserCheckIn) {
-            const enrolledClasses = classes.filter(c => selectedUser.enrolledClasses?.includes(c.id) && !c.isCompleted);
-            return (
-                <div>
-                    <h2 className="text-2xl font-bold mb-4">Welcome, {selectedUser.firstName}</h2>
-                    <p className="mb-6">You are not clocked in. Please select a class to clock into.</p>
-                    {enrolledClasses.length > 0 ? enrolledClasses.map(course => (
-                        <button key={course.id} onClick={() => handleClassSelect(course.id)} className="w-full text-left p-4 mb-3 bg-white rounded-lg shadow hover:bg-gray-50 flex justify-between items-center">
-                            <div>
-                                <p className="font-semibold">{course.name}</p>
-                                <p className="text-sm text-gray-500">{course.startDate}</p>
-                            </div>
-                            <LogIn className="h-5 w-5 text-green-500" />
-                        </button>
-                    )) : <p>No available classes for enrollment.</p>}
-                </div>
-            );
-        }
-
-        if (currentUserCheckIn && !currentUserCheckIn.stationId) {
-            const availableStations = stations.filter(s => s.classId === currentUserCheckIn.classId);
-            if (availableStations.length === 0) {
-                return (
-                     <div>
-                        <h2 className="text-2xl font-bold mb-2">You are now checked into {classes.find(c => c.id === currentUserCheckIn.classId)?.name}.</h2>
-                        <p className="mb-6">There are no stations to select for this class. Returning to login shortly...</p>
-                    </div>
-                );
-            }
-            return (
-                <div>
-                    <h2 className="text-2xl font-bold mb-2">You are clocked into {classes.find(c => c.id === currentUserCheckIn.classId)?.name}.</h2>
-                    <p className="mb-6">Please select a station to check into.</p>
-                    {availableStations.map(station => (
-                        <button key={station.id} onClick={() => handleStationSelect(station.id)} className="w-full text-left p-4 mb-3 bg-white rounded-lg shadow hover:bg-gray-50 flex justify-between items-center">
-                            <p className="font-semibold">{station.name}</p>
-                            <ChevronRight className="h-5 w-5 text-gray-400" />
-                        </button>
-                    ))}
-                </div>
-            );
-        }
-
-        if (currentUserCheckIn && currentUserCheckIn.stationId) {
-            const currentStation = stations.find(s => s.id === currentUserCheckIn.stationId);
+        // **REVISED: Switched to new state variables for clarity and correctness**
+        if (activeStationCheckIn) {
+            const currentStation = stations.find(s => s.id === activeStationCheckIn.stationId);
             return (
                 <div className="text-center">
-                    <h2 className="text-2xl font-bold mb-2">You are checked into {currentStation?.name}.</h2>
+                    <h2 className="text-2xl font-bold mb-2">You are checked into station: {currentStation?.name}.</h2>
                     <p className="text-gray-600 mb-6">What would you like to do?</p>
                     <div className="space-y-4">
                         <button onClick={handleStationCheckout} className="w-full p-4 bg-yellow-500 text-white rounded-lg font-semibold hover:bg-yellow-600 flex items-center justify-center">
@@ -347,6 +305,49 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                 </div>
             );
         }
+
+        if (activeClassCheckIn) {
+            const availableStations = stations.filter(s => s.classId === activeClassCheckIn.classId);
+            return (
+                <div>
+                    <h2 className="text-2xl font-bold mb-2">You are checked into class: {classes.find(c => c.id === activeClassCheckIn.classId)?.name}.</h2>
+                    {availableStations.length > 0 ? (
+                        <>
+                            <p className="mb-6">Please select a station to check into.</p>
+                            {availableStations.map(station => (
+                                <button key={station.id} onClick={() => handleStationSelect(station.id)} className="w-full text-left p-4 mb-3 bg-white rounded-lg shadow hover:bg-gray-50 flex justify-between items-center">
+                                    <p className="font-semibold">{station.name}</p>
+                                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                                </button>
+                            ))}
+                        </>
+                    ) : (
+                        <p className="mb-6">There are no stations available for this class.</p>
+                    )}
+                    <button onClick={handleClassCheckout} className="w-full mt-4 p-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 flex items-center justify-center">
+                        <LogOut className="mr-2 h-5 w-5" /> Check Out of Class
+                    </button>
+                </div>
+            );
+        }
+
+        // Default view: No active check-ins, show available classes
+        const enrolledClasses = classes.filter(c => selectedUser.enrolledClasses?.includes(c.id) && !c.isCompleted);
+        return (
+            <div>
+                <h2 className="text-2xl font-bold mb-4">Welcome, {selectedUser.firstName}</h2>
+                <p className="mb-6">You are not clocked in. Please select a class to clock into.</p>
+                {enrolledClasses.length > 0 ? enrolledClasses.map(course => (
+                    <button key={course.id} onClick={() => handleClassSelect(course.id)} className="w-full text-left p-4 mb-3 bg-white rounded-lg shadow hover:bg-gray-50 flex justify-between items-center">
+                        <div>
+                            <p className="font-semibold">{course.name}</p>
+                            <p className="text-sm text-gray-500">{course.startDate}</p>
+                        </div>
+                        <LogIn className="h-5 w-5 text-green-500" />
+                    </button>
+                )) : <p>No available classes for enrollment.</p>}
+            </div>
+        );
     };
     
     const renderMessageScreen = () => {
