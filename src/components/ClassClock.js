@@ -106,31 +106,39 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         }
     };
 
-    const handleClassSelect = async (classId) => {
+    const handleClassSelect = (classId) => {
         const course = classes.find(c => c.id === classId);
-        await handleClassCheckIn(selectedUser, course, null);
-        alert(`Successfully clocked into class: ${course.name}.`);
-        resetUser();
+        handleClassCheckIn(selectedUser, course, null)
+            .then(() => {
+                alert(`Successfully clocked into class: ${course.name}.`);
+                resetUser();
+            });
     };
 
-    const handleStationSelect = async (stationId) => {
+    const handleStationSelect = (stationId) => {
         const station = stations.find(s => s.id === stationId);
         const course = classes.find(c => c.id === station.classId);
-        await handleClassCheckIn(selectedUser, course, station);
-        alert(`Successfully checked into station: ${station.name}.`);
-        resetUser();
+        handleClassCheckIn(selectedUser, course, station)
+            .then(() => {
+                alert(`Successfully checked into station: ${station.name}.`);
+                resetUser();
+            });
     };
 
-    const handleStationCheckout = async () => {
-        await handleClassCheckOut(currentUserCheckIn.id);
-        alert(`Successfully checked out of station.`);
-        resetUser();
+    const handleStationCheckout = () => {
+        handleClassCheckOut(currentUserCheckIn.id)
+            .then(() => {
+                alert(`Successfully checked out of station.`);
+                resetUser();
+            });
     };
 
-    const handleClassCheckout = async () => {
-        await handleClassCheckOut(currentUserCheckIn.id);
-        alert(`Successfully checked out of class.`);
-        resetUser();
+    const handleClassCheckout = () => {
+        handleClassCheckOut(currentUserCheckIn.id)
+            .then(() => {
+                alert(`Successfully checked out of class.`);
+                resetUser();
+            });
     };
 
     const resetUser = () => {
