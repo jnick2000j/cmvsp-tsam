@@ -1,5 +1,4 @@
-// STEP 2: DEPLOY THIS FILE TO ADD THE NEW V2 FUNCTION.
-// This file re-introduces the deleteUserAccount function in the V2 format.
+// This file includes the full waiver management and approval workflow.
 
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentDeleted } = require("firebase-functions/v2/firestore"); // V2 import for Firestore triggers
@@ -72,55 +71,40 @@ exports.createUserAccount = onCall(async (request) => {
 });
 
 /**
- * Creates a pending enrollment request in the root `enrollmentRequests` collection.
+ * Creates a pending enrollment request and checks for required waivers.
  */
 exports.enrollInCourse = onCall(async (request) => {
     const { classId } = request.data;
     const uid = request.auth?.uid;
 
-    if (!uid) {
-        throw new HttpsError('unauthenticated', 'You must be logged in to enroll.');
-    }
-    if (!classId) {
-        throw new HttpsError('invalid-argument', 'A "classId" is required.');
-    }
+    if (!uid) throw new HttpsError('unauthenticated', 'You must be logged in to enroll.');
+    if (!classId) throw new HttpsError('invalid-argument', 'A "classId" is required.');
 
     const db = getFirestore();
     const appId = appIdentifier.value();
-    if (!appId) {
-        console.error("FATAL ERROR: The APP_ID environment variable is not set.");
-        throw new HttpsError('internal', 'The server is missing critical configuration.');
-    }
+    if (!appId) throw new HttpsError('internal', 'The server is missing critical configuration.');
     
     const classRef = db.doc(`artifacts/${appId}/public/data/classes/${classId}`);
     const studentRef = db.doc(`users/${uid}`);
     const requestRef = db.collection('enrollmentRequests').doc(`${classId}_${uid}`);
 
     try {
-        const [classDoc, studentDoc, requestDoc] = await Promise.all([
-            classRef.get(),
-            studentRef.get(),
-            requestRef.get()
-        ]);
+        const [classDoc, studentDoc, requestDoc] = await Promise.all([classRef.get(), studentRef.get(), requestRef.get()]);
 
-        if (!classDoc.exists) {
-            throw new HttpsError('not-found', 'The specified class could not be found.');
-        }
-        if (!studentDoc.exists) {
-            throw new HttpsError('not-found', 'Could not find your user profile.');
-        }
-        if (requestDoc.exists) {
-            throw new HttpsError('already-exists', 'You have already submitted a request for this class.');
-        }
+        if (!classDoc.exists) throw new HttpsError('not-found', 'The specified class could not be found.');
+        if (!studentDoc.exists) throw new HttpsError('not-found', 'Could not find your user profile.');
+        if (requestDoc.exists) throw new HttpsError('already-exists', 'You have already submitted a request for this class.');
         
         const classData = classDoc.data();
-        if (classData.isClosedForEnrollment) {
-            throw new HttpsError('failed-precondition', 'Enrollment is currently closed for this class.');
-        }
+        if (classData.isClosedForEnrollment) throw new HttpsError('failed-precondition', 'Enrollment is currently closed for this class.');
+
+        // NEW: Check if waivers are required for this class
+        const requiredWaivers = classData.requiredWaiverIds || [];
+        const status = requiredWaivers.length > 0 ? 'pending_waivers' : 'pending_approval';
 
         const studentData = studentDoc.data();
         await requestRef.set({
-            status: 'pending',
+            status: status, // Set status based on waiver requirement
             requestDate: FieldValue.serverTimestamp(),
             userId: uid,
             classId: classId,
@@ -129,43 +113,53 @@ exports.enrollInCourse = onCall(async (request) => {
             leadInstructorId: classData.leadInstructorId || null 
         });
 
-        return { success: true, message: 'Your enrollment request has been submitted for approval.' };
+        const message = status === 'pending_waivers' 
+            ? 'Enrollment request received. Please sign the required waivers to proceed.'
+            : 'Your enrollment request has been submitted for approval.';
+        return { success: true, message: message };
 
     } catch (error) {
         console.error(`Enrollment request error for user ${uid} in class ${classId}:`, error);
-        if (error instanceof HttpsError) {
-            throw error;
-        }
+        if (error instanceof HttpsError) throw error;
         throw new HttpsError('internal', 'An unexpected error occurred during the request.');
     }
 });
 
-
 /**
- * Approves a pending enrollment request.
+ * Approves a pending enrollment request, but only if all waivers are approved.
  */
 exports.approveEnrollment = onCall(async (request) => {
     const { requestId } = request.data;
     const approverId = request.auth?.uid;
 
-    if (!approverId) {
-        throw new HttpsError('unauthenticated', 'Authentication required to approve.');
-    }
-    if (!requestId) {
-        throw new HttpsError('invalid-argument', 'A "requestId" is required.');
-    }
+    if (!approverId) throw new HttpsError('unauthenticated', 'Authentication required to approve.');
+    if (!requestId) throw new HttpsError('invalid-argument', 'A "requestId" is required.');
 
     const db = getFirestore();
     const requestRef = db.collection('enrollmentRequests').doc(requestId);
     const requestDoc = await requestRef.get();
 
-    if (!requestDoc.exists) {
-        throw new HttpsError('not-found', 'The enrollment request was not found.');
-    }
+    if (!requestDoc.exists) throw new HttpsError('not-found', 'The enrollment request was not found.');
     
     const { userId, classId } = requestDoc.data();
-    const studentRef = db.doc(`users/${userId}`);
+    const classRef = db.doc(`artifacts/${appIdentifier.value()}/public/data/classes/${classId}`);
+    const classSnap = await classRef.get();
+    const requiredWaivers = classSnap.data().requiredWaiverIds || [];
 
+    // NEW: Verify all required waivers are signed and approved
+    if (requiredWaivers.length > 0) {
+        const signedWaiversQuery = await db.collection('signedWaivers')
+            .where('userId', '==', userId)
+            .where('classId', '==', classId)
+            .where('status', '==', 'approved')
+            .get();
+        
+        if (signedWaiversQuery.size !== requiredWaivers.length) {
+            throw new HttpsError('failed-precondition', 'Cannot approve enrollment until all required waivers are signed and approved.');
+        }
+    }
+
+    const studentRef = db.doc(`users/${userId}`);
     const batch = db.batch();
     batch.update(requestRef, { status: 'approved', approvedBy: approverId, approvedAt: FieldValue.serverTimestamp() });
     batch.update(studentRef, { enrolledClasses: FieldValue.arrayUnion(classId) });
@@ -183,21 +177,82 @@ exports.denyEnrollment = onCall(async (request) => {
     const { requestId } = request.data;
     const denierId = request.auth?.uid;
 
-    if (!denierId) {
-        throw new HttpsError('unauthenticated', 'Authentication required to deny.');
-    }
-    if (!requestId) {
-        throw new HttpsError('invalid-argument', 'A "requestId" is required.');
-    }
+    if (!denierId) throw new HttpsError('unauthenticated', 'Authentication required to deny.');
+    if (!requestId) throw new HttpsError('invalid-argument', 'A "requestId" is required.');
 
     const db = getFirestore();
     const requestRef = db.collection('enrollmentRequests').doc(requestId);
-    
     await requestRef.update({ status: 'denied', deniedBy: denierId, deniedAt: FieldValue.serverTimestamp() });
     
     console.log(`TODO: Send denial email regarding request ${requestId}.`);
-
     return { success: true, message: "Enrollment denied." };
+});
+
+/**
+ * Creates a new waiver template. Admin only.
+ */
+exports.createWaiverTemplate = onCall(async (request) => {
+    const { title, content } = request.data;
+    const uid = request.auth?.uid;
+    // In a real app, you'd verify the user is an admin here
+    if (!uid) throw new HttpsError('unauthenticated', 'Admin authentication required.');
+    if (!title || !content) throw new HttpsError('invalid-argument', 'Title and content are required.');
+
+    const db = getFirestore();
+    await db.collection('waiverTemplates').add({
+        title,
+        content,
+        createdAt: FieldValue.serverTimestamp(),
+        createdBy: uid,
+    });
+    return { success: true, message: 'Waiver template created successfully.' };
+});
+
+/**
+ * Allows a user to electronically sign a waiver for a class.
+ */
+exports.signWaiver = onCall(async (request) => {
+    const { classId, waiverTemplateId, signature } = request.data;
+    const uid = request.auth?.uid;
+
+    if (!uid) throw new HttpsError('unauthenticated', 'You must be logged in to sign a waiver.');
+    if (!classId || !waiverTemplateId || !signature) throw new HttpsError('invalid-argument', 'Class ID, Waiver ID, and signature are required.');
+
+    const db = getFirestore();
+    const waiverRef = db.collection('signedWaivers').doc(`${classId}_${uid}_${waiverTemplateId}`);
+    
+    await waiverRef.set({
+        classId,
+        waiverTemplateId,
+        userId: uid,
+        signature, // This is the user's typed name
+        status: 'pending_review',
+        signedAt: FieldValue.serverTimestamp(),
+    });
+
+    return { success: true, message: 'Waiver signed and submitted for review.' };
+});
+
+/**
+ * Allows an instructor/admin to approve a signed waiver.
+ */
+exports.approveWaiver = onCall(async (request) => {
+    const { signedWaiverId } = request.data;
+    const approverId = request.auth?.uid;
+
+    if (!approverId) throw new HttpsError('unauthenticated', 'Authentication required.');
+    // In a real app, verify the approver is an admin or the class instructor
+    
+    const db = getFirestore();
+    const waiverRef = db.collection('signedWaivers').doc(signedWaiverId);
+    
+    await waiverRef.update({
+        status: 'approved',
+        reviewedBy: approverId,
+        reviewedAt: FieldValue.serverTimestamp(),
+    });
+
+    return { success: true, message: 'Waiver approved.' };
 });
 
 

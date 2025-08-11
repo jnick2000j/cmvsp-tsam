@@ -8,22 +8,29 @@ const CourseCatalog = ({ currentUser, classes }) => {
     const [enrollingClassId, setEnrollingClassId] = useState(null);
     const [enrollmentStatuses, setEnrollmentStatuses] = useState({});
 
-    // Listen to real-time status updates from the enrollmentRequests collection
+    // This useEffect hook is the key fix. It sets up a real-time listener.
     useEffect(() => {
+        // Only run the listener if the user is logged in.
         if (!currentUser?.uid) return;
 
+        // Create a query to listen to enrollment requests specifically for the current user.
         const q = query(collection(db, "enrollmentRequests"), where("userId", "==", currentUser.uid));
         
+        // onSnapshot creates a real-time connection.
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const statuses = {};
+            // When the data changes in Firestore, this code runs automatically.
             snapshot.forEach(doc => {
+                // Store the status ('pending', 'approved', etc.) for each class the user has interacted with.
                 statuses[doc.data().classId] = doc.data().status;
             });
+            // Update the component's state, which will re-render the UI with the correct button text.
             setEnrollmentStatuses(statuses);
         });
 
+        // Cleanup function: when the component unmounts, stop listening to prevent memory leaks.
         return () => unsubscribe();
-    }, [currentUser]);
+    }, [currentUser]); // This effect re-runs if the currentUser changes.
 
     const handleEnrollRequest = async (classId) => {
         setEnrollingClassId(classId);
@@ -38,7 +45,7 @@ const CourseCatalog = ({ currentUser, classes }) => {
         setEnrollingClassId(null);
     };
 
-    // Memoize button state calculation for performance
+    // This function determines the text and state of the button.
     const getButtonState = useMemo(() => (classId, isClosed) => {
         const status = enrollmentStatuses[classId];
         const isEnrolling = enrollingClassId === classId;
@@ -49,7 +56,8 @@ const CourseCatalog = ({ currentUser, classes }) => {
         switch (status) {
             case 'approved':
                 return { text: 'Enrolled', disabled: true, style: 'bg-green-600' };
-            case 'pending':
+            case 'pending_approval':
+            case 'pending_waivers': // Treat both pending states the same on this view
                 return { text: 'Pending Approval', disabled: true, style: 'bg-yellow-500' };
             case 'denied':
                 return { text: 'Request Denied', disabled: true, style: 'bg-red-600' };
