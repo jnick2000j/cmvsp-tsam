@@ -3,6 +3,8 @@ export const INSTRUCTOR_ROLES = ['Lead Instructor', 'Assisting Instructor', 'OEC
 export const SUPPORT_ROLES = ['Aid Room Patroller', 'Alpine Patroller', 'Professional Patroller', 'Safety Patroller', 'OEC Safety Patroller', 'Mountain Host', 'Other'];
 export const appId = 'training-attendance-app';
 
+export const PATROL_ADMIN_ROLES = ['Patrol Shift Leader', 'Assistant Patrol Shift Leader', 'Patrol Leadership'];
+
 // Scheduling Module Constants
 export const PATROL_LEADER_ROLES = ['Patrol Shift Leader', 'Assistant Patrol Shift Leader', 'Patrol Leadership'];
 export const PATROL_ROLES = [

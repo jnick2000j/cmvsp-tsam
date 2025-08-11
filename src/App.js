@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot, query, updateDoc, addDoc, getDocs, where, serverTimestamp, arrayRemove, arrayUnion, runTransaction } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
-import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROL_LEADER_ROLES, appId } from './constants';
+import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROL_LEADER_ROLES, PATROL_ADMIN_ROLES, appId } from './constants'; // Assuming PATROL_ADMIN_ROLES exists in constants.js
 
 // Import All Components
 import AuthComponent from './components/AuthComponent';
@@ -403,9 +403,11 @@ export default function App() {
     if (isClassClockView) return <ClassClock {...{users: allUsers, classes, stations, dailyCheckIns, handleClassCheckIn, handleClassCheckOut, branding, timeClocks}} />;
     if (!user) return <AuthComponent {...{logoUrl: branding.siteLogo, loginTitle: branding.loginTitle, authMessage: loginMessage, setAuthMessage: setLoginMessage}} />;
 
-    const isInstructor = user.isAdmin || INSTRUCTOR_ROLES.includes(user.role);
-    const isPatrolLeadership = user.isAdmin || PATROL_LEADER_ROLES.includes(user.ability);
-    const hasSchedulingAccess = user.isAdmin || user.allowScheduling;
+    const isInstructor = user.isAdmin || (user.roles && INSTRUCTOR_ROLES.some(role => user.roles.includes(role)));
+    const isPatrolLeadership = user.isAdmin || (user.roles && PATROL_LEADER_ROLES.some(role => user.roles.includes(role)));
+    const isPatrolAdmin = user.isAdmin || (user.roles && PATROL_ADMIN_ROLES.some(role => user.roles.includes(role)));
+    const canManageAttendance = isInstructor || isPatrolLeadership || isPatrolAdmin;
+
 
     const renderContent = () => {
         const enrolledClassesDetails = classes.filter(c => user.enrolledClasses?.includes(c.id));
@@ -420,7 +422,7 @@ export default function App() {
                 return <MyTraining {...{ user, enrolledClassesDetails, dailyCheckIns, setActiveClassId, handlePrerequisiteCheckin, handleCancelEnrollment, allUsers, classes, stations, checkIns, generateClassPdf }} />;
             case 'attendance': 
                 return <AttendanceTabs {...{ 
-                    user, 
+                    currentUser: user, 
                     allUsers, 
                     classes, 
                     stations, 
@@ -433,7 +435,6 @@ export default function App() {
                     handleShiftCheckOut
                 }} />;
             
-            // **FIX: Pass the 'classes' prop from the App state to the CourseCatalog component.**
             case 'catalog': 
                 return <CourseCatalog currentUser={user} classes={classes} />;
 
@@ -523,7 +524,7 @@ export default function App() {
                         
                         <button onClick={() => handleNavClick('catalog')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'catalog' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><BookOpen className="mr-1.5 h-4 w-4" />Course Catalog</button>
                         
-                        {isInstructor && (<button onClick={() => handleNavClick('attendance')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'attendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ClipboardList className="mr-1.5 h-4 w-4" />Attendance Management</button>)}
+                        {canManageAttendance && (<button onClick={() => handleNavClick('attendance')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'attendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ClipboardList className="mr-1.5 h-4 w-4" />Attendance Management</button>)}
                         
                         {isPatrolLeadership && <button onClick={() => handleNavClick('scheduleManagement')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'scheduleManagement' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserCheck className="mr-1.5 h-4 w-4" />Schedule Management</button>}
 

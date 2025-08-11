@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../firebaseConfig';
-import { collection, doc, getDocs, updateDoc, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, updateDoc, query, where, getDocs } from 'firebase/firestore'; // Correctly import getDoc
 import { Clock, CheckCircle } from 'lucide-react';
 import { PATROLS, MOUNTAIN_AREAS, PATROL_ROLES, PATROL_LEADER_ROLES, appId } from '../constants';
 import ViewAttendance from './ViewAttendance';
@@ -20,7 +20,11 @@ const PatrolAttendance = ({ allUsers }) => {
             if (selectedPatrol && selectedDate) {
                 const shiftId = `${selectedPatrol}-${selectedDate}`;
                 const shiftRef = doc(db, `artifacts/${appId}/public/data/shifts`, shiftId);
-                const shiftSnap = await getDocs(shiftRef);
+                
+                // --- BUG FIX ---
+                // Changed getDocs(shiftRef) to getDoc(shiftRef) to fetch a single document.
+                const shiftSnap = await getDoc(shiftRef); 
+                
                 if (shiftSnap.exists()) {
                     setShift({ id: shiftSnap.id, ...shiftSnap.data() });
                 } else {
@@ -114,26 +118,8 @@ const PatrolAttendance = ({ allUsers }) => {
     );
 };
 
+// --- CLEANUP ---
+// The old, duplicate AttendanceTabs component has been removed from this file.
+// The primary, functioning AttendanceTabs component is now in 'src/components/AttendanceTabs.js'.
 
-const AttendanceTabs = ({ allUsers, courses, opportunities }) => {
-    const [activeTab, setActiveTab] = useState('patrol');
-
-    return (
-        <div>
-            <div className="flex space-x-1 border-b">
-                <button onClick={() => setActiveTab('patrol')} className={`px-4 py-2 text-sm font-medium rounded-t-lg ${activeTab === 'patrol' ? 'bg-white border-b-0' : 'bg-gray-100 text-gray-500'}`}>Patrol Attendance</button>
-                <button onClick={() => setActiveTab('training')} className={`px-4 py-2 text-sm font-medium rounded-t-lg ${activeTab === 'training' ? 'bg-white border-b-0' : 'bg-gray-100 text-gray-500'}`}>Training Attendance</button>
-                <button onClick={() => setActiveTab('instructor')} className={`px-4 py-2 text-sm font-medium rounded-t-lg ${activeTab === 'instructor' ? 'bg-white border-b-0' : 'bg-gray-100 text-gray-500'}`}>Instructor Attendance</button>
-                <button onClick={() => setActiveTab('support')} className={`px-4 py-2 text-sm font-medium rounded-t-lg ${activeTab === 'support' ? 'bg-white border-b-0' : 'bg-gray-100 text-gray-500'}`}>Support Attendance</button>
-            </div>
-            <div className="p-4 bg-white rounded-b-lg shadow">
-                {activeTab === 'patrol' && <PatrolAttendance allUsers={allUsers} />}
-                {activeTab === 'training' && <ViewAttendance allUsers={allUsers} courses={courses} />}
-                {activeTab === 'instructor' && <InstructorAttendance allUsers={allUsers} courses={courses} />}
-                {activeTab === 'support' && <SupportAttendance allUsers={allUsers} opportunities={opportunities} />}
-            </div>
-        </div>
-    );
-};
-
-export default AttendanceTabs;
+export default PatrolAttendance; // Export the correct component for this file.
