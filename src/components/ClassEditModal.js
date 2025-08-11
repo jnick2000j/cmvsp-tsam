@@ -61,10 +61,8 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
 const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser, waivers, branding }) => {
     const [formData, setFormData] = useState({});
     const [numGroups, setNumGroups] = useState(1);
-    // --- NEW: State for the enrollment feature ---
     const [enrolledStudentsList, setEnrolledStudentsList] = useState([]);
     const [selectedStudent, setSelectedStudent] = useState('');
-
 
     const allRoles = useMemo(() => ['Student', ...INSTRUCTOR_ROLES, ...SUPPORT_ROLES], []);
     
@@ -86,11 +84,11 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         isCompleted: false
     }), [currentUser]);
 
-    // --- NEW: Fetches the list of enrolled students from the subcollection ---
+    // **FIX:** Corrected the path to the 'enrollments' subcollection.
     const fetchEnrolledStudents = useCallback(async (classId) => {
         if (!classId) return;
         try {
-            const enrollmentsRef = collection(db, 'classes', classId, 'enrollments');
+            const enrollmentsRef = collection(db, `artifacts/${appId}/public/data/classes`, classId, 'enrollments');
             const snapshot = await getDocs(enrollmentsRef);
             const studentIds = snapshot.docs.map(doc => doc.id);
             const enrolled = allUsers.filter(user => studentIds.includes(user.id));
@@ -111,12 +109,11 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                 setFormData(data);
                 const maxGroup = Object.values(data.studentGroups || {}).reduce((max, num) => Math.max(max, num), 1);
                 setNumGroups(maxGroup);
-                // --- NEW: Fetch students when modal opens for an existing class ---
                 fetchEnrolledStudents(classToEdit.id);
             } else {
                 setFormData(getInitialFormData());
                 setNumGroups(1);
-                setEnrolledStudentsList([]); // Reset for new class
+                setEnrolledStudentsList([]);
             }
         }
     }, [classToEdit, isOpen, getInitialFormData, fetchEnrolledStudents]);
@@ -166,17 +163,14 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
 
     const handleRandomAssign = () => {
         const studentIds = enrolledStudentsList.map(s => s.id);
-
         for (let i = studentIds.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [studentIds[i], studentIds[j]] = [studentIds[j], studentIds[i]];
         }
-
         const newStudentGroups = {};
         studentIds.forEach((studentId, index) => {
             newStudentGroups[studentId] = (index % numGroups) + 1;
         });
-
         setFormData({ ...formData, studentGroups: newStudentGroups });
     };
 
@@ -187,7 +181,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
     const handleUnenrollStudent = async (studentId) => {
         if (!classToEdit) return;
         try {
-            const enrollmentRef = doc(db, "classes", classToEdit.id, "enrollments", studentId);
+            const enrollmentRef = doc(db, `artifacts/${appId}/public/data/classes`, classToEdit.id, "enrollments", studentId);
             await deleteDoc(enrollmentRef);
 
             const userRef = doc(db, "users", studentId);
@@ -217,8 +211,8 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
             const result = await enrollStudentFn({ classId: classToEdit.id, studentId: selectedStudent });
             if (result.data.success) {
                 alert(result.data.message);
-                setSelectedStudent(''); // Reset dropdown
-                fetchEnrolledStudents(classToEdit.id); // Refresh the list
+                setSelectedStudent('');
+                fetchEnrolledStudents(classToEdit.id);
             } else {
                 throw new Error(result.data.message);
             }
@@ -266,6 +260,24 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                     </div>
                     <div><label className="block text-sm font-medium text-gray-700">Lead Instructor</label><select name="leadInstructorId" value={formData.leadInstructorId || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">{instructors.map(i => <option key={i.id} value={i.id}>{i.firstName} {i.lastName}</option>)}</select></div>
                     
+                    {/* **FIX:** Added the Waiver Management section UI. */}
+                    <div>
+                        <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Waiver Management</h3>
+                        <div className="mt-2 space-y-2">
+                            {waivers.map(waiver => (
+                                <label key={waiver.id} className="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        checked={(formData.requiredWaivers || []).includes(waiver.id)}
+                                        onChange={() => handleWaiverChange(waiver.id)}
+                                        className="h-4 w-4 text-indigo-600 border-gray-300 rounded"
+                                    />
+                                    <span className="ml-2 text-sm text-gray-700">{waiver.name}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
                     {classToEdit && canManageEnrollment && (
                         <div>
                             <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Manual Enrollment</h3>

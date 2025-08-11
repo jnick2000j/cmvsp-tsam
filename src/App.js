@@ -123,7 +123,11 @@ export default function App() {
         };
 
         const unsubscribers = Object.entries(collectionsToWatch).map(([name, setter]) => {
-            let q = query(collection(db, name === 'users' ? 'users' : `artifacts/${appId}/public/data/${name}`));
+            // **FIX:** Corrected the query path logic to check for 'users' or 'waivers' as top-level collections.
+            const isTopLevel = name === 'users' || name === 'waivers';
+            const path = isTopLevel ? name : `artifacts/${appId}/public/data/${name}`;
+            const q = query(collection(db, path));
+            
             return onSnapshot(q, (snapshot) => {
                 setter(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             }, (err) => console.error(`Failed to load ${name}:`, err));
@@ -360,7 +364,6 @@ export default function App() {
         }
     };
     
-    // **REVISED: Implemented shift check-in/out logic**
     const handleShiftCheckIn = async (user, shift, location) => {
         try {
             if (!user || !shift) {
