@@ -52,7 +52,7 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
     const [userPin, setUserPin] = useState('');
     const [message, setMessage] = useState('');
     const todayISO = new Date().toISOString().split('T')[0];
-    
+
     const [time, setTime] = useState(new Date());
     useEffect(() => {
         const timer = setInterval(() => setTime(new Date()), 1000);
@@ -75,7 +75,7 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
             setDevicePin('');
         }
     };
-    
+
     const handleDevicePinChange = (e) => {
         const newPin = e.target.value;
         if (/^\d*$/.test(newPin) && newPin.length <= 10) {
@@ -90,6 +90,7 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
             setUserPin('');
             return;
         }
+        // Using timeClockPin as the definitive source per previous request
         if (String(selectedUser.timeClockPin) !== userPin) {
             setMessage("Invalid PIN. Please try again.");
             setUserPin('');
@@ -106,41 +107,6 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         }
     };
 
-    const handleClassSelect = (classId) => {
-        const course = classes.find(c => c.id === classId);
-        handleClassCheckIn(selectedUser, course, null)
-            .then(() => {
-                alert(`Successfully clocked into class: ${course.name}.`);
-                resetUser();
-            });
-    };
-
-    const handleStationSelect = (stationId) => {
-        const station = stations.find(s => s.id === stationId);
-        const course = classes.find(c => c.id === station.classId);
-        handleClassCheckIn(selectedUser, course, station)
-            .then(() => {
-                alert(`Successfully checked into station: ${station.name}.`);
-                resetUser();
-            });
-    };
-
-    const handleStationCheckout = () => {
-        handleClassCheckOut(currentUserCheckIn.id)
-            .then(() => {
-                alert(`Successfully checked out of station.`);
-                resetUser();
-            });
-    };
-
-    const handleClassCheckout = () => {
-        handleClassCheckOut(currentUserCheckIn.id)
-            .then(() => {
-                alert(`Successfully checked out of class.`);
-                resetUser();
-            });
-    };
-
     const resetUser = () => {
         setSelectedUser(null);
         setUserPin('');
@@ -148,6 +114,59 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         setView('login');
     };
 
+    const handleClassSelect = async (classId) => {
+        const course = classes.find(c => c.id === classId);
+        try {
+            await handleClassCheckIn(selectedUser, course, null);
+            alert(`Successfully clocked into class: ${course.name}.`);
+        } catch (error) {
+            console.error("Failed to check into class:", error);
+            alert("Error: Could not check into the class. Please try again.");
+        } finally {
+            resetUser();
+        }
+    };
+
+    const handleStationSelect = async (stationId) => {
+        const station = stations.find(s => s.id === stationId);
+        const course = classes.find(c => c.id === station.classId);
+        try {
+            await handleClassCheckIn(selectedUser, course, station);
+            alert(`Successfully checked into station: ${station.name}.`);
+        } catch (error) {
+            console.error("Failed to check into station:", error);
+            alert("Error: Could not check into the station. Please try again.");
+        } finally {
+            resetUser();
+        }
+    };
+
+    const handleStationCheckout = async () => {
+        try {
+            await handleClassCheckOut(currentUserCheckIn.id);
+            alert(`Successfully checked out of station.`);
+        } catch (error) {
+            console.error("Failed to check out of station:", error);
+            alert("Error: Could not check out of the station. Please try again.");
+        } finally {
+            resetUser();
+        }
+    };
+
+    const handleClassCheckout = async () => {
+        try {
+            await handleClassCheckOut(currentUserCheckIn.id);
+            alert(`Successfully checked out of class.`);
+        } catch (error) {
+            console.error("Failed to check out of class:", error);
+            alert("Error: Could not check out of the class. Please try again.");
+        } finally {
+            resetUser();
+        }
+    };
+
+    // --- The rest of your component remains the same ---
+    
     const renderDeviceLogin = () => (
         <form onSubmit={handleDevicePinSubmit} className="w-full max-w-sm bg-white rounded-xl shadow-lg p-8 space-y-6">
             <div className="flex justify-center mb-4">
@@ -228,6 +247,11 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
     );
 
     const renderActionScreen = () => {
+        if (!selectedUser) {
+             // This case should ideally not be reached if view logic is correct, but as a fallback:
+            return <p>Please select a user.</p>;
+        }
+
         if (!currentUserCheckIn) {
             const enrolledClasses = classes.filter(c => selectedUser.enrolledClasses?.includes(c.id) && !c.isCompleted);
             return (

@@ -324,25 +324,55 @@ export default function App() {
     };
 
     const handleClassCheckIn = async (attendee, course, station) => {
-        const todayISO = new Date().toISOString().split('T')[0];
-        const checkInData = {
-            userId: attendee.uid,
-            role: attendee.role,
-            classId: course.id,
-            stationId: station.id,
-            checkInDate: todayISO,
-            checkInTime: serverTimestamp(),
-            status: 'pending',
-        };
-        await addDoc(collection(db, `artifacts/${appId}/public/data/dailyCheckIns`), checkInData);
+        // **FIXED: This function now correctly handles check-ins and includes more data.**
+        try {
+            if (!attendee || !course) {
+                throw new Error("Attendee or course information is missing.");
+            }
+    
+            const todayISO = new Date().toISOString().split('T')[0];
+            const checkInData = {
+                userId: attendee.uid,
+                userName: `${attendee.firstName} ${attendee.lastName}`,
+                role: attendee.role,
+                classId: course.id,
+                className: course.name,
+                // Safely handle cases where there is no station
+                stationId: station ? station.id : null,
+                stationName: station ? station.name : null,
+                checkInDate: todayISO,
+                checkInTime: serverTimestamp(),
+                checkOutTime: null, // Ensure checkout time is null on creation
+                status: 'pending',
+            };
+            
+            const docRef = await addDoc(collection(db, `artifacts/${appId}/public/data/dailyCheckIns`), checkInData);
+            console.log("Successfully checked in with document ID:", docRef.id);
+        } catch (error) {
+            console.error("Error during class check-in:", error);
+            // This re-throws the error so the calling component (ClassClock) can catch it.
+            throw error;
+        }
     };
 
     const handleClassCheckOut = async (checkInId) => {
-        const checkInRef = doc(db, `artifacts/${appId}/public/data/dailyCheckIns`, checkInId);
-        await updateDoc(checkInRef, {
-            checkOutTime: serverTimestamp()
-        });
+        // **FIXED: Added error handling and validation.**
+        try {
+            if (!checkInId) {
+                throw new Error("No check-in ID provided for checkout.");
+            }
+            const checkInRef = doc(db, `artifacts/${appId}/public/data/dailyCheckIns`, checkInId);
+            await updateDoc(checkInRef, {
+                checkOutTime: serverTimestamp()
+            });
+            console.log("Successfully checked out for checkInId:", checkInId);
+        } catch (error) {
+            console.error("Error during class check-out:", error);
+            // This re-throws the error so the calling component can catch it.
+            throw error;
+        }
     };
+
 
     if (isAuthLoading || (user && !user.firstName && !isTimeClockView && !isClassClockView)) {
         return <div className="flex items-center justify-center h-screen bg-gray-100"><div className="text-xl font-semibold text-gray-600">Loading Application...</div></div>;
@@ -392,7 +422,7 @@ export default function App() {
                         currentUser={user}
                         allUsers={allUsers}
                         patrols={stations.filter(s => s.type === 'patrol')}
-                      />
+                    />
                     : <div>Access Denied.</div>;
             case 'dashboard':
             default:
