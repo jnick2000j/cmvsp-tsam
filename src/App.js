@@ -9,7 +9,7 @@ import AuthComponent from './components/AuthComponent';
 import AdminPortal from './components/AdminPortal';
 import MyStations from './components/MyStations';
 import AttendanceTabs from './components/AttendanceTabs';
-import CourseCatalog from './components/CourseCatalog'; // Ensure this is imported
+import CourseCatalog from './components/CourseCatalog';
 import ProfileManagement from './components/ProfileManagement';
 import CertificateModal from './components/CertificateModal';
 import ConfirmationModal from './components/ConfirmationModal';
@@ -26,10 +26,9 @@ import HelpUsOut from './components/HelpUsOut';
 import ShiftTradeModal from './components/ShiftTradeModal';
 
 import { generateClassPdf } from './utils/pdfGenerator';
-import { LayoutDashboard, ClipboardList, Library, Shield, Calendar, HelpingHand, UserCheck, BookOpen } from 'lucide-react'; // Added BookOpen for catalog
+import { LayoutDashboard, ClipboardList, Library, Shield, Calendar, HelpingHand, UserCheck, BookOpen } from 'lucide-react';
 
 export default function App() {
-    // ... (All existing state variables remain the same)
     const [user, setUser] = useState(null);
     const [isAuthLoading, setIsAuthLoading] = useState(true);
     const [branding, setBranding] = useState({
@@ -139,7 +138,6 @@ export default function App() {
         return () => unsubscribers.forEach(unsub => unsub());
     }, [user, isAuthLoading, isTimeClockView, isClassClockView]);
 
-    // ... (all other functions like myAssignments, handleApproveUser, handleSignOut etc. remain the same)
     const myAssignments = useMemo(() => {
         if (!user) return [];
         const assignments = [];
@@ -434,9 +432,10 @@ export default function App() {
                     handleShiftCheckIn,
                     handleShiftCheckOut
                 }} />;
-            // **FIX: Add the new case for the Course Catalog view**
+            
             case 'catalog': 
-                return <CourseCatalog {...{ currentUser: user }} />;
+                return <CourseCatalog currentUser={user} classes={classes} />;
+
             case 'profile': return <ProfileManagement {...{ user, setConfirmAction }} />;
             
             case 'mySchedule':
@@ -521,7 +520,6 @@ export default function App() {
 
                         <button onClick={() => handleNavClick('myTraining')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'myTraining' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Library className="mr-1.5 h-4 w-4" />My Training</button>
                         
-                        {/* **FIX: Add the new Course Catalog navigation button** */}
                         <button onClick={() => handleNavClick('catalog')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'catalog' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><BookOpen className="mr-1.5 h-4 w-4" />Course Catalog</button>
                         
                         {isInstructor && (<button onClick={() => handleNavClick('attendance')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'attendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ClipboardList className="mr-1.5 h-4 w-4" />Attendance Management</button>)}
