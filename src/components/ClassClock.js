@@ -30,14 +30,16 @@ const PinPad = ({ onKeyPress, onClear, onDelete, onSubmit, disabled, pin, pinLen
                     </button>
                 ))}
             </div>
-             <button
-                type="button"
-                onClick={onSubmit}
-                disabled={disabled || pin.length !== pinLength}
-                className="w-full mt-4 h-14 bg-green-500 text-white text-lg font-bold rounded-lg hover:bg-green-600 disabled:bg-gray-400"
-            >
-                Submit
-            </button>
+            {onSubmit && (
+                 <button
+                    type="button"
+                    onClick={onSubmit}
+                    disabled={disabled || pin.length !== pinLength}
+                    className="w-full mt-4 h-14 bg-primary text-white text-lg font-bold rounded-lg hover:bg-primary-hover disabled:bg-gray-400"
+                >
+                    Submit
+                </button>
+            )}
         </div>
     );
 };
@@ -81,13 +83,14 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         }
     };
 
-    const handleUserLogin = () => {
+    const handleUserLogin = (e) => {
+        e.preventDefault();
         if (!selectedUser) {
             setMessage("Please select your name first.");
             setUserPin('');
             return;
         }
-        if (selectedUser.pin !== userPin) {
+        if (String(selectedUser.pin) !== userPin) {
             setMessage("Invalid PIN. Please try again.");
             setUserPin('');
             return;
@@ -150,7 +153,7 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                 value={devicePin}
                 onChange={handleDevicePinChange}
                 placeholder="Enter 10-Digit PIN"
-                className="w-full px-4 py-3 border rounded-lg text-center tracking-widest text-xl"
+                className="w-full px-4 py-3 border rounded-lg text-center tracking-widest text-xl focus:ring-2 focus:ring-accent"
                 maxLength="10"
                 autoFocus
             />
@@ -160,7 +163,6 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                 onKeyPress={(key) => { if (devicePin.length < 10) setDevicePin(devicePin + key) }}
                 onDelete={() => setDevicePin(devicePin.slice(0, -1))}
                 onClear={() => setDevicePin('')}
-                onSubmit={handleDevicePinSubmit}
             />
              <button type="submit" className="w-full py-3 text-white bg-primary hover:bg-primary-hover rounded-lg flex items-center justify-center font-semibold">
                 <LogIn className="h-5 w-5 mr-2" />
@@ -170,14 +172,13 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
     );
 
     const renderUserLogin = () => (
-        <div className="w-full max-w-sm bg-white rounded-xl shadow-lg p-8 space-y-6">
+        <form onSubmit={handleUserLogin} className="w-full max-w-sm bg-white rounded-xl shadow-lg p-8 space-y-6">
              <div className="flex justify-center mb-4">
                 {branding && branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="h-20 w-auto" />}
             </div>
             <h1 className="text-2xl font-bold text-center text-gray-800">Training Class Login</h1>
             
-            <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">1. Select Your Name</label>
+            <div className="space-y-4">
                 <select
                     value={selectedUser?.id || ''}
                     onChange={(e) => {
@@ -185,43 +186,37 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                         setUserPin('');
                         setMessage('');
                     }}
-                    className="w-full p-3 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full p-3 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-accent"
                 >
-                    <option value="">-- Please select your name --</option>
+                    <option value="">-- Select Your Name --</option>
                     {users.map(user => (
                         <option key={user.id} value={user.id}>
                             {user.firstName} {user.lastName}
                         </option>
                     ))}
                 </select>
-            </div>
-            <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                    2. Enter Your PIN {selectedUser && `for ${selectedUser.firstName}`}
-                </label>
-                <div className="relative">
-                    <input
-                        type="password"
-                        value={userPin}
-                        onChange={handleUserPinChange}
-                        placeholder="••••"
-                        maxLength="4"
-                        className="w-full px-4 py-3 border rounded-lg text-center tracking-widest text-xl"
-                        disabled={!selectedUser}
-                    />
-                </div>
-                {message && <p className="text-red-500 text-center text-sm mt-2 mb-2">{message}</p>}
-                <PinPad 
-                    pin={userPin} 
-                    pinLength={4}
-                    onKeyPress={(key) => { if (userPin.length < 4) setUserPin(userPin + key) }}
-                    onDelete={() => setUserPin(userPin.slice(0, -1))}
-                    onClear={() => setUserPin('')}
-                    onSubmit={handleUserLogin}
-                    disabled={!selectedUser} 
+                
+                <input
+                    type="password"
+                    value={userPin}
+                    onChange={handleUserPinChange}
+                    placeholder="Enter Your PIN"
+                    className="w-full px-4 py-3 border rounded-lg text-center tracking-widest text-xl focus:ring-2 focus:ring-accent"
+                    maxLength="4"
+                    disabled={!selectedUser}
                 />
             </div>
-        </div>
+            {message && <p className="text-center text-red-500 bg-red-50 p-3 rounded-lg">{message}</p>}
+            <PinPad 
+                pin={userPin} 
+                pinLength={4}
+                onKeyPress={(key) => { if (userPin.length < 4) setUserPin(userPin + key) }}
+                onDelete={() => setUserPin(userPin.slice(0, -1))}
+                onClear={() => setUserPin('')}
+                onSubmit={handleUserLogin}
+                disabled={!selectedUser} 
+            />
+        </form>
     );
 
     const renderActionScreen = () => {
