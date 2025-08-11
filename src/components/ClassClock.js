@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Clock, ArrowLeft, LogIn, LogOut, Briefcase, ChevronRight, Delete } from 'lucide-react';
 
-const PinPad = ({ onKeyPress, onClear, onDelete, disabled }) => {
+const PinPad = ({ onKeyPress, onClear, onDelete, onSubmit, disabled, pin, pinLength }) => {
     const buttons = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'];
 
     const handleButtonClick = (value) => {
@@ -23,13 +23,21 @@ const PinPad = ({ onKeyPress, onClear, onDelete, disabled }) => {
                         key={btn}
                         type="button"
                         onClick={() => handleButtonClick(btn)}
-                        disabled={disabled}
+                        disabled={disabled && btn !== 'C' && btn !== '⌫'}
                         className="p-4 text-xl font-bold bg-gray-200 rounded-lg hover:bg-gray-300 aspect-square"
                     >
                         {btn}
                     </button>
                 ))}
             </div>
+             <button
+                type="button"
+                onClick={onSubmit}
+                disabled={disabled || pin.length !== pinLength}
+                className="w-full mt-4 h-14 bg-green-500 text-white text-lg font-bold rounded-lg hover:bg-green-600 disabled:bg-gray-400"
+            >
+                Submit
+            </button>
         </div>
     );
 };
@@ -162,17 +170,11 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
     );
 
     const renderUserLogin = () => (
-        <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
-            <h2 className="text-4xl font-bold text-center text-gray-800">Training Class Login</h2>
-            
-            <div className="text-center">
-                <p className="text-6xl font-mono font-bold text-gray-900 tracking-wider">
-                    {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
-                <p className="text-xl text-gray-500">
-                    {time.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </p>
+        <div className="w-full max-w-sm bg-white rounded-xl shadow-lg p-8 space-y-6">
+             <div className="flex justify-center mb-4">
+                {branding && branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="h-20 w-auto" />}
             </div>
+            <h1 className="text-2xl font-bold text-center text-gray-800">Training Class Login</h1>
             
             <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">1. Select Your Name</label>
@@ -204,7 +206,7 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                         onChange={handleUserPinChange}
                         placeholder="••••"
                         maxLength="4"
-                        className="w-full px-4 py-3 text-3xl tracking-[0.5em] text-center bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
+                        className="w-full px-4 py-3 border rounded-lg text-center tracking-widest text-xl"
                         disabled={!selectedUser}
                     />
                 </div>
