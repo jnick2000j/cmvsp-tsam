@@ -1,9 +1,7 @@
 // src/components/ClassEditModal.js
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { doc, updateDoc, addDoc, collection, arrayRemove, getDocs, deleteDoc } from 'firebase/firestore';
-// MODIFICATION: Added 'functions' to the import
 import { db, functions } from '../firebaseConfig';
-// MODIFICATION: Added 'httpsCallable' to communicate with the backend
 import { httpsCallable } from 'firebase/functions';
 import { appId, INSTRUCTOR_ROLES, SUPPORT_ROLES } from '../constants';
 import { PlusCircle, Trash2, ChevronLeft, Check } from 'lucide-react';
@@ -58,11 +56,12 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
 };
 
 
-const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser, waivers, branding }) => {
+const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser, branding }) => {
     const [formData, setFormData] = useState({});
     const [numGroups, setNumGroups] = useState(1);
     const [enrolledStudentsList, setEnrolledStudentsList] = useState([]);
     const [selectedStudent, setSelectedStudent] = useState('');
+
 
     const allRoles = useMemo(() => ['Student', ...INSTRUCTOR_ROLES, ...SUPPORT_ROLES], []);
     
@@ -76,7 +75,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         leadInstructorId: currentUser?.uid || '', 
         supportNeeds: [], 
         studentGroups: {}, 
-        requiredWaivers: [], 
         isPrerequisiteUploadRequired: false, 
         isHidden: false, 
         visibleToRoles: [], 
@@ -84,7 +82,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         isCompleted: false
     }), [currentUser]);
 
-    // **FIX:** Corrected the path to the 'enrollments' subcollection.
     const fetchEnrolledStudents = useCallback(async (classId) => {
         if (!classId) return;
         try {
@@ -127,16 +124,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
     
     const handleRoleVisibilityChange = (selectedRoles) => {
         setFormData({ ...formData, visibleToRoles: selectedRoles });
-    };
-
-    const handleWaiverChange = (waiverId) => {
-        setFormData(prev => {
-            const currentWaivers = prev.requiredWaivers || [];
-            const newWaivers = currentWaivers.includes(waiverId)
-                ? currentWaivers.filter(id => id !== waiverId)
-                : [...currentWaivers, waiverId];
-            return { ...prev, requiredWaivers: newWaivers };
-        });
     };
 
     const handleSupportChange = (index, field, value) => {
@@ -260,24 +247,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                     </div>
                     <div><label className="block text-sm font-medium text-gray-700">Lead Instructor</label><select name="leadInstructorId" value={formData.leadInstructorId || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">{instructors.map(i => <option key={i.id} value={i.id}>{i.firstName} {i.lastName}</option>)}</select></div>
                     
-                    {/* **FIX:** Added the Waiver Management section UI. */}
-                    <div>
-                        <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Waiver Management</h3>
-                        <div className="mt-2 space-y-2">
-                            {waivers.map(waiver => (
-                                <label key={waiver.id} className="flex items-center">
-                                    <input
-                                        type="checkbox"
-                                        checked={(formData.requiredWaivers || []).includes(waiver.id)}
-                                        onChange={() => handleWaiverChange(waiver.id)}
-                                        className="h-4 w-4 text-indigo-600 border-gray-300 rounded"
-                                    />
-                                    <span className="ml-2 text-sm text-gray-700">{waiver.name}</span>
-                                </label>
-                            ))}
-                        </div>
-                    </div>
-
                     {classToEdit && canManageEnrollment && (
                         <div>
                             <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Manual Enrollment</h3>

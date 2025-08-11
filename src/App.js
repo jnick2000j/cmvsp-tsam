@@ -44,7 +44,6 @@ export default function App() {
 
     const [stations, setStations] = useState([]);
     const [classes, setClasses] = useState([]);
-    const [waivers, setWaivers] = useState([]);
     const [allUsers, setAllUsers] = useState([]);
     const [dailyCheckIns, setDailyCheckIns] = useState([]);
     const [checkIns, setCheckIns] = useState([]);
@@ -112,7 +111,6 @@ export default function App() {
         const collectionsToWatch = {
             classes: setClasses,
             stations: setStations,
-            waivers: setWaivers,
             users: setAllUsers,
             checkins: setCheckIns,
             dailyCheckIns: setDailyCheckIns,
@@ -123,8 +121,6 @@ export default function App() {
         };
 
         const unsubscribers = Object.entries(collectionsToWatch).map(([name, setter]) => {
-            // **FIX:** Reverted the logic to treat `users` as the only top-level collection.
-            // `waivers` is now correctly fetched from within the `artifacts` path.
             const path = name === 'users' ? name : `artifacts/${appId}/public/data/${name}`;
             const q = query(collection(db, path));
             
@@ -418,7 +414,7 @@ export default function App() {
             return <MyStations activeClass={activeClass} stations={stations} onBack={() => setActiveClassId(null)} />
         }
         switch (view) {
-            case 'admin': return <AdminPortal {...{ currentUser: user, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser: handleApproveUser, branding }} />;
+            case 'admin': return <AdminPortal {...{ currentUser: user, stations, classes, allUsers, setConfirmAction, onApproveUser: handleApproveUser, branding }} />;
             case 'siteBranding': return <div className="p-4 sm:p-6 lg:p-8"><Branding branding={branding} onUpdate={setBranding} /></div>;
             case 'myTraining':
                 return <MyTraining {...{ user, enrolledClassesDetails, dailyCheckIns, setActiveClassId, handlePrerequisiteCheckin, handleCancelEnrollment, allUsers, classes, stations, checkIns, generateClassPdf }} />;
@@ -430,7 +426,7 @@ export default function App() {
                     stations, 
                     shifts, 
                     dailyCheckIns, 
-                    timeClockEntries,
+                    timeClockEntries, 
                     handleClassCheckIn, 
                     handleClassCheckOut,
                     handleShiftCheckIn,
