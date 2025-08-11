@@ -5,19 +5,19 @@ import PatrolAttendance from './PatrolAttendance';
 import SupportAttendance from './SupportAttendance';
 import InstructorAttendance from './InstructorAttendance';
 import PendingEnrollments from './PendingEnrollments';
-import PendingWaiverApprovals from './PendingWaiverApprovals'; // Import the new component for waivers
+import PendingWaiverApprovals from './PendingWaiverApprovals';
 
 const AttendanceTabs = ({ currentUser, classes }) => {
     const [activeTab, setActiveTab] = useState('class');
 
     // This definition array controls which tabs are available and to whom.
+    // THE FIX: Pass the required props (currentUser, classes) to ALL child components.
     const tabs = [
-        { id: 'class', label: 'Class Attendance', component: <ClassAttendance />, roles: ['Student', 'Instructor', 'Admin'] },
-        { id: 'patrol', label: 'Patrol Attendance', component: <PatrolAttendance />, roles: ['Patroller', 'Admin'] },
-        { id: 'support', label: 'Support Attendance', component: <SupportAttendance />, roles: ['Support', 'Admin'] },
-        { id: 'instructor', label: 'Instructor Attendance', component: <InstructorAttendance />, roles: ['Instructor', 'Admin'] },
+        { id: 'class', label: 'Class Attendance', component: <ClassAttendance currentUser={currentUser} classes={classes} />, roles: ['Student', 'Instructor', 'Admin'] },
+        { id: 'patrol', label: 'Patrol Attendance', component: <PatrolAttendance currentUser={currentUser} />, roles: ['Patroller', 'Admin'] },
+        { id: 'support', label: 'Support Attendance', component: <SupportAttendance currentUser={currentUser} />, roles: ['Support', 'Admin'] },
+        { id: 'instructor', label: 'Instructor Attendance', component: <InstructorAttendance currentUser={currentUser} classes={classes} />, roles: ['Instructor', 'Admin'] },
         { id: 'pending', label: 'Pending Enrollments', component: <PendingEnrollments currentUser={currentUser} classes={classes} />, roles: ['Instructor', 'Admin'] },
-        // NEW: Add the Pending Waiver Approvals tab, visible only to specific roles
         { id: 'pending_waivers', label: 'Pending Waivers', component: <PendingWaiverApprovals currentUser={currentUser} />, roles: ['Instructor', 'Admin'] }
     ];
 
@@ -27,7 +27,13 @@ const AttendanceTabs = ({ currentUser, classes }) => {
     );
 
     const renderContent = () => {
+        // Find the active tab from the list of VISIBLE tabs
         const activeTabData = visibleTabs.find(tab => tab.id === activeTab);
+        // If the active tab is not in the visible list (e.g., after a role change), default to the first visible tab
+        if (!activeTabData && visibleTabs.length > 0) {
+            setActiveTab(visibleTabs[0].id);
+            return visibleTabs[0].component;
+        }
         return activeTabData ? activeTabData.component : null;
     };
 
