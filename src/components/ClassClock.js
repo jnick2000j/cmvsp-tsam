@@ -1,33 +1,35 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Clock, ArrowLeft, LogIn, LogOut, Briefcase, ChevronRight, Delete } from 'lucide-react';
 
-const PinPad = ({ onKeyPress, onClear, onDelete, onSubmit, disabled, pin, pinLength }) => {
+const PinPad = ({ onKeyPress, onClear, onDelete, disabled }) => {
+    const buttons = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'];
+
+    const handleButtonClick = (value) => {
+        if (disabled) return;
+        if (value === 'C') {
+            onClear();
+        } else if (value === '⌫') {
+            onDelete();
+        } else {
+            onKeyPress(value);
+        }
+    };
+
     return (
         <div className={`w-full max-w-xs mx-auto ${disabled ? 'opacity-50' : ''}`}>
-            <div className="grid grid-cols-3 gap-4">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-                    <button key={num} onClick={() => onKeyPress(num.toString())} disabled={disabled} className="py-4 text-2xl font-bold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent transition-all duration-150 ease-in-out">
-                        {num}
+            <div className="grid grid-cols-3 gap-2">
+                {buttons.map((btn) => (
+                    <button
+                        key={btn}
+                        type="button"
+                        onClick={() => handleButtonClick(btn)}
+                        disabled={disabled}
+                        className="p-4 text-xl font-bold bg-gray-200 rounded-lg hover:bg-gray-300 aspect-square"
+                    >
+                        {btn}
                     </button>
                 ))}
-                <button onClick={onClear} disabled={disabled} className="py-4 text-xl font-bold text-gray-700 bg-yellow-400 rounded-lg hover:bg-yellow-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 transition-all duration-150 ease-in-out">
-                    Clear
-                </button>
-                <button onClick={() => onKeyPress('0')} disabled={disabled} className="py-4 text-2xl font-bold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent transition-all duration-150 ease-in-out">
-                    0
-                </button>
-                <button onClick={onDelete} disabled={disabled} className="py-4 text-xl font-bold text-white bg-red-500 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-150 ease-in-out flex items-center justify-center">
-                    <Delete size={24} />
-                </button>
             </div>
-             <button
-                type="button"
-                onClick={onSubmit}
-                disabled={disabled || pin.length !== pinLength}
-                className="w-full mt-4 h-14 bg-green-500 text-white text-lg font-bold rounded-lg hover:bg-green-600 disabled:bg-gray-400"
-            >
-                Submit
-            </button>
         </div>
     );
 };
@@ -52,8 +54,9 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         return dailyCheckIns.find(ci => ci.userId === selectedUser.uid && ci.checkInDate === todayISO && !ci.checkOutTime);
     }, [selectedUser, dailyCheckIns, todayISO]);
 
-    const handleDevicePinSubmit = () => {
-        const authorizedDevice = timeClocks.find(tc => tc.pin === devicePin);
+    const handleDevicePinSubmit = (e) => {
+        e.preventDefault();
+        const authorizedDevice = timeClocks.find(tc => tc.pin === devicePin && tc.type === 'Class Clock');
         if (authorizedDevice) {
             setMessage('');
             setView('login');
@@ -127,33 +130,22 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
     };
 
     const renderDeviceLogin = () => (
-        <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
-            <h2 className="text-4xl font-bold text-center text-gray-800">Training Clock Login</h2>
-            
-            <div className="text-center">
-                <p className="text-6xl font-mono font-bold text-gray-900 tracking-wider">
-                    {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
-                <p className="text-xl text-gray-500">
-                    {time.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </p>
+        <form onSubmit={handleDevicePinSubmit} className="w-full max-w-sm bg-white rounded-xl shadow-lg p-8 space-y-6">
+            <div className="flex justify-center mb-4">
+                {branding && branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="h-20 w-auto" />}
             </div>
+            <h1 className="text-2xl font-bold text-center text-gray-800">Training Clock Login</h1>
+            {message && <p className="text-center text-red-500 bg-red-50 p-3 rounded-lg">{message}</p>}
             
-            <p className="text-center text-gray-600">Enter the 10-digit device PIN to continue.</p>
-            
-            <div className="relative">
-                <input
-                    type="password"
-                    value={devicePin}
-                    onChange={handleDevicePinChange}
-                    placeholder="**********"
-                    maxLength="10"
-                    className="w-full px-4 py-3 text-3xl tracking-[0.2em] text-center bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-            </div>
-
-            {message && <p className="text-red-500 text-center text-sm mb-2">{message}</p>}
-            
+            <input
+                type="password"
+                value={devicePin}
+                onChange={handleDevicePinChange}
+                placeholder="Enter 10-Digit PIN"
+                className="w-full px-4 py-3 border rounded-lg text-center tracking-widest text-xl"
+                maxLength="10"
+                autoFocus
+            />
             <PinPad 
                 pin={devicePin} 
                 pinLength={10}
@@ -162,7 +154,11 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                 onClear={() => setDevicePin('')}
                 onSubmit={handleDevicePinSubmit}
             />
-        </div>
+             <button type="submit" className="w-full py-3 text-white bg-primary hover:bg-primary-hover rounded-lg flex items-center justify-center font-semibold">
+                <LogIn className="h-5 w-5 mr-2" />
+                Login Device
+            </button>
+        </form>
     );
 
     const renderUserLogin = () => (
@@ -283,8 +279,6 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
 
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-            {branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="mx-auto h-24 mb-6" />}
-            
             {view === 'device_login' && renderDeviceLogin()}
             {view === 'login' && renderUserLogin()}
 

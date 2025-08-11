@@ -94,7 +94,6 @@ const HelpUsOut = ({ currentUser, users, shifts, courses }) => {
 
     return (
         <div className="p-4">
-            <h1 className="text-2xl font-bold mb-4">Help Us Out!</h1>
             <div className="flex border-b mb-4">
                 <button
                     className={`px-4 py-2 text-sm font-medium ${activeTab === 'openShifts' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}
