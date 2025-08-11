@@ -1,38 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebaseConfig';
 import { collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { appId } from '../constants';
 
 const HelpUsOut = ({ currentUser, users, shifts, courses }) => {
     const [activeTab, setActiveTab] = useState('openShifts');
-    const [openShifts, setOpenShifts] = useState([]);
-    const [trainingNeeds, setTrainingNeeds] = useState([]);
 
-    useEffect(() => {
-        const getOpenings = () => {
-            // Open Shifts
-            const openShiftRoles = [];
+    const openShifts = useMemo(() => {
+        const openShiftRoles = [];
+        if (shifts) {
             shifts.forEach(shift => {
-                shift.roles.forEach(role => {
-                    const assignedCount = shift.assignments.filter(a => a.role === role.name).length;
-                    const openSpots = role.target - assignedCount;
-                    if (openSpots > 0) {
-                        openShiftRoles.push({
-                            shiftId: shift.id,
-                            date: shift.date,
-                            patrol: shift.patrolId,
-                            role: role.name,
-                            openSpots,
-                        });
-                    }
-                });
+                if (shift.roles) {
+                    shift.roles.forEach(role => {
+                        const assignedCount = shift.assignments ? shift.assignments.filter(a => a.role === role.name).length : 0;
+                        const openSpots = role.target - assignedCount;
+                        if (openSpots > 0) {
+                            openShiftRoles.push({
+                                shiftId: shift.id,
+                                date: shift.date.toDate(), // Convert Firestore timestamp to Date
+                                patrol: shift.patrolId,
+                                role: role.name,
+                                openSpots,
+                            });
+                        }
+                    });
+                }
             });
-            setOpenShifts(openShiftRoles);
+        }
+        return openShiftRoles;
+    }, [shifts]);
 
-            // Training Needs
-            const neededTrainingRoles = [];
+    const trainingNeeds = useMemo(() => {
+        const neededTrainingRoles = [];
+        if (courses) {
             courses.forEach(course => {
-                // Example for instructor roles, assuming 'instructors' is an array of assigned instructor IDs
                 const assignedInstructors = course.instructors ? course.instructors.length : 0;
                 const instructorSpots = (course.instructorTarget || 1) - assignedInstructors;
                 if (instructorSpots > 0) {
@@ -43,13 +44,10 @@ const HelpUsOut = ({ currentUser, users, shifts, courses }) => {
                         openSpots: instructorSpots,
                     });
                 }
-                // You can add similar logic for support and skill roles
             });
-            setTrainingNeeds(neededTrainingRoles);
-        };
-
-        getOpenings();
-    }, [shifts, courses]);
+        }
+        return neededTrainingRoles;
+    }, [courses]);
 
     const handleShiftSignUp = async (shift) => {
         if (!currentUser) {
@@ -65,7 +63,7 @@ const HelpUsOut = ({ currentUser, users, shifts, courses }) => {
                 status: 'pending',
                 requestDate: serverTimestamp(),
             });
-            alert(`You have requested to sign up for ${shift.role} on ${shift.date}. Your request is pending approval.`);
+            alert(`You have requested to sign up for ${shift.role} on ${shift.date.toLocaleDateString()}. Your request is pending approval.`);
         } catch (error) {
             console.error("Error signing up for shift: ", error);
             alert("There was an error with your request. Please try again.");
@@ -120,7 +118,7 @@ const HelpUsOut = ({ currentUser, users, shifts, courses }) => {
                             <div key={index} className="p-4 bg-gray-100 rounded-lg flex justify-between items-center">
                                 <div>
                                     <p className="font-bold">{shift.patrol} - {shift.role}</p>
-                                    <p className="text-sm text-gray-600">{new Date(shift.date).toLocaleDateString()}</p>
+                                    <p className="text-sm text-gray-600">{shift.date.toLocaleDateString()}</p>
                                     <p className="text-sm font-semibold text-green-600">{shift.openSpots} spot(s) open</p>
                                 </div>
                                 <button
