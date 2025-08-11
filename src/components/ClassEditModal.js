@@ -184,21 +184,17 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         setFormData({ ...formData, studentGroups: { ...formData.studentGroups, [studentId]: parseInt(group, 10) } });
     };
     
-    // --- MODIFICATION: Updated to work with the new subcollection model ---
     const handleUnenrollStudent = async (studentId) => {
         if (!classToEdit) return;
         try {
-            // First, remove from the class's subcollection
             const enrollmentRef = doc(db, "classes", classToEdit.id, "enrollments", studentId);
             await deleteDoc(enrollmentRef);
 
-            // Then, update the user's document
             const userRef = doc(db, "users", studentId);
             await updateDoc(userRef, {
                 enrolledClasses: arrayRemove(classToEdit.id)
             });
 
-            // Finally, refresh the UI
             fetchEnrolledStudents(classToEdit.id);
         } catch (error) {
             console.error("Error unenrolling student:", error);
@@ -206,7 +202,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         }
     };
 
-    // --- NEW: Handler for the manual enrollment button ---
     const handleManualEnroll = async () => {
         if (!selectedStudent) {
             alert("Please select a student to enroll.");
@@ -253,7 +248,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         } catch (err) { console.error(err); }
     };
 
-    // Your existing logic for who can manage enrollment
     const canManageEnrollment = currentUser.isAdmin || currentUser.uid === formData.leadInstructorId;
 
     return (
@@ -261,17 +255,17 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
             <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
                 <div className="p-6 border-b"><h2 className="text-2xl font-bold text-gray-800">{classToEdit ? 'Edit Class' : 'Add New Class'}</h2></div>
                 <div className="p-6 space-y-4 overflow-y-auto">
-                    {/* ALL YOUR ORIGINAL FORM FIELDS ARE UNCHANGED */}
                     <div><label className="block text-sm font-medium text-gray-700">Class Name</label><input name="name" value={formData.name || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <div><label className="block text-sm font-medium text-gray-700">Start Date</label><input type="date" name="startDate" value={formData.startDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                          <div><label className="block text-sm font-medium text-gray-700">End Date</label><input type="date" name="endDate" value={formData.endDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                     </div>
-                    {/* ... other original form fields ... */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><label className="block text-sm font-medium text-gray-700">Location</label><input name="location" value={formData.location || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
+                        <div><label className="block text-sm font-medium text-gray-700">Total Hours</label><input type="number" name="hours" value={formData.hours || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
+                    </div>
                     <div><label className="block text-sm font-medium text-gray-700">Lead Instructor</label><select name="leadInstructorId" value={formData.leadInstructorId || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">{instructors.map(i => <option key={i.id} value={i.id}>{i.firstName} {i.lastName}</option>)}</select></div>
-                    {/* ... other original form fields ... */}
-
-                    {/* --- NEW: MANUAL ENROLLMENT UI --- */}
+                    
                     {classToEdit && canManageEnrollment && (
                         <div>
                             <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Manual Enrollment</h3>
@@ -300,7 +294,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                         </div>
                     )}
                     
-                    {/* --- YOUR ORIGINAL ENROLLMENT/GROUP MANAGEMENT SECTION --- */}
                     {classToEdit && (
                         <div>
                             <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Group & Enrollment Management</h3>
@@ -333,10 +326,50 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                         </div>
                     )}
 
-                    {/* ALL YOUR OTHER ORIGINAL SECTIONS ARE UNCHANGED */}
                     <div>
                          <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Support Needs</h3>
-                         {/* ...your support needs mapping... */}
+                         <div className="space-y-3 mt-2">
+                            {(formData.supportNeeds || []).map((need, index) => (
+                                <div key={need.id} className="p-3 border rounded-md bg-gray-50 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    <div className="lg:col-span-3">
+                                        <label className="block text-sm font-medium text-gray-600">Need Description</label>
+                                        <input type="text" placeholder="e.g., Additional Instructor" value={need.need} onChange={(e) => handleSupportChange(index, 'need', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-600">Date</label>
+                                        <input type="date" value={need.date} onChange={(e) => handleSupportChange(index, 'date', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-600">Start Time</label>
+                                            <input type="time" value={need.startTime} onChange={(e) => handleSupportChange(index, 'startTime', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-600">End Time</label>
+                                            <input type="time" value={need.endTime} onChange={(e) => handleSupportChange(index, 'endTime', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-end space-x-2">
+                                        <div className="flex-grow">
+                                            <label className="block text-sm font-medium text-gray-600">Assign To</label>
+                                            <select value={need.assignedUserId} onChange={(e) => handleSupportChange(index, 'assignedUserId', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                                                <option value="">Unassigned</option>
+                                                {allUsers.filter(u => Array.isArray(u.roles) && [...INSTRUCTOR_ROLES, ...SUPPORT_ROLES].some(role => u.roles.includes(role))).map(u => (
+                                                    <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <button type="button" onClick={() => removeSupportNeed(index)} className="p-2 text-red-600 hover:text-red-800">
+                                            <Trash2 size={20} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                         </div>
+                         <button type="button" onClick={addSupportNeed} className="mt-3 flex items-center px-3 py-2 text-sm bg-green-100 text-green-800 rounded-md hover:bg-green-200">
+                            <PlusCircle size={16} className="mr-2" />
+                            Add Support Need
+                         </button>
                     </div>
                 </div>
                 <div className="p-6 bg-gray-50 border-t flex justify-end space-x-3">

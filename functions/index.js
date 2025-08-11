@@ -1,12 +1,16 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
-const { getFirestore, FieldValue, arrayUnion } = require("firebase-admin/firestore");
-const { RRule } = require('rrule'); // Assuming you have this from the previous step
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { RRule } = require('rrule'); // Assuming rrule is in your package.json
 
+// Initialize the Firebase Admin SDK
 initializeApp();
 
-// --- Converted from your original file to 2nd Gen syntax ---
+/**
+ * Creates a new user account in Firebase Authentication and a corresponding
+ * user document in Firestore.
+ */
 exports.createUserAccount = onCall(async (request) => {
     const data = request.data;
     if (!data.email || !data.password) {
@@ -22,6 +26,10 @@ exports.createUserAccount = onCall(async (request) => {
         });
     } catch (error) {
         console.error("Error creating new user:", error);
+        // Provides a more specific error message if the email is already in use.
+        if (error.code === 'auth/email-already-exists') {
+            throw new HttpsError("already-exists", "The email address is already in use by another account.");
+        }
         throw new HttpsError("internal", "Failed to create authentication user.");
     }
 
@@ -38,14 +46,14 @@ exports.createUserAccount = onCall(async (request) => {
         nspId: data.isOtherAffiliated ? data.nspId : "",
         isAffiliated: data.isCmspAffiliated,
         primaryAgency: data.isOtherAffiliated ? data.primaryAgency : (data.isCmspAffiliated ? "Crystal Mountain Ski Patrol" : ""),
-        role: "Student",
+        role: "Student", // Default role for new users
         isAdmin: false,
         allowScheduling: false,
         assignments: {},
         enrolledClasses: [],
         completedClasses: {},
         isApproved: false,
-        needsApproval: true,
+        needsApproval: true, // New accounts require admin approval
     };
 
     try {
@@ -53,27 +61,34 @@ exports.createUserAccount = onCall(async (request) => {
         return { status: "success", message: "User created successfully." };
     } catch (error) {
         console.error(`Error creating Firestore document for UID: ${userRecord.uid}`, error);
+        // If Firestore write fails, roll back the auth user creation to prevent orphaned accounts.
         await getAuth().deleteUser(userRecord.uid);
         throw new HttpsError("internal", "Failed to save user profile.");
     }
 });
 
-
-// --- NEW: enrollStudent Function (Corrected Logic) ---
+/**
+ * Enrolls a student into a class, with permission checks for the calling user.
+ */
 exports.enrollStudent = onCall(async (request) => {
     const { classId, studentId } = request.data;
-    const uid = request.auth.uid;
+    const uid = request.auth?.uid;
 
     if (!uid) {
         throw new HttpsError('unauthenticated', 'You must be logged in to perform this action.');
     }
 
     const db = getFirestore();
-    const classRef = db.collection('classes').doc(classId);
+    // **Correction**: The collection path should be the full path used on the client-side.
+    const classRef = db.doc(`artifacts/cmvsp-tsam/public/data/classes/${classId}`);
     const studentRef = db.collection('users').doc(studentId);
 
-    const callingUserRecord = await getAuth().getUser(uid);
-    const userRole = callingUserRecord.customClaims?.role;
+    const callingUserDoc = await db.collection('users').doc(uid).get();
+    if (!callingUserDoc.exists) {
+        throw new HttpsError('not-found', 'Calling user record not found.');
+    }
+    const callingUserData = callingUserDoc.data();
+    const isAdmin = callingUserData.isAdmin === true;
 
     const classDoc = await classRef.get();
     if (!classDoc.exists) {
@@ -81,9 +96,10 @@ exports.enrollStudent = onCall(async (request) => {
     }
 
     const classData = classDoc.data();
-    const isLeadInstructor = classData.leadInstructorIds?.includes(uid);
+    const isLeadInstructor = classData.leadInstructorId === uid;
 
-    if (userRole !== 'admin' && !isLeadInstructor) {
+    // Only admins or the lead instructor of the class can enroll students.
+    if (!isAdmin && !isLeadInstructor) {
         throw new HttpsError('permission-denied', 'You do not have permission to enroll students in this class.');
     }
 
@@ -104,7 +120,33 @@ exports.enrollStudent = onCall(async (request) => {
     }
 });
 
-// --- This function would also be here from the previous steps ---
+
+/**
+ * Deletes a user's account from Firebase Authentication when their corresponding
+ * document is deleted from the 'users' collection in Firestore.
+ * NOTE: This uses 1st Gen syntax because 2nd Gen does not yet support Firestore triggers
+ * in the same way. This is a common and acceptable pattern.
+ */
+const functions = require("firebase-functions");
+exports.deleteUserAccount = functions.firestore
+    .document('users/{userId}')
+    .onDelete(async (snap, context) => {
+        const deletedUserId = context.params.userId;
+        console.log(`Attempting to delete auth user: ${deletedUserId}`);
+        try {
+            await getAuth().deleteUser(deletedUserId);
+            console.log(`Successfully deleted user account with ID: ${deletedUserId}`);
+        } catch (error) {
+            console.error(`Error deleting user account with ID: ${deletedUserId}`, error);
+        }
+    });
+
+
+// Placeholder for the applyShiftTemplate function if you need it.
+// You would convert its logic to the 2nd Gen `onCall` syntax as well.
 exports.applyShiftTemplate = onCall(async (request) => {
-    // ... existing applyShiftTemplate code ...
+    // ... existing applyShiftTemplate code converted to 2nd Gen ...
+    // For now, this is a placeholder.
+    console.log("applyShiftTemplate called with data:", request.data);
+    return { status: "pending", message: "Function not fully implemented." };
 });
