@@ -85,7 +85,7 @@ const RecurrenceEditor = ({ recurrence, setRecurrence }) => {
 };
 
 // Template Manager Component
-const TemplateManager = ({ templates, setTemplates, allUsers }) => {
+const TemplateManager = ({ templates, setShiftTemplates, allUsers }) => {
     const [editingTemplate, setEditingTemplate] = useState(null);
 
     const handleSaveTemplate = async (templateData) => {
@@ -97,11 +97,11 @@ const TemplateManager = ({ templates, setTemplates, allUsers }) => {
             if (templateData.id) {
                 const templateRef = doc(db, `artifacts/${appId}/public/data/shiftTemplates`, templateData.id);
                 await updateDoc(templateRef, templateData);
-                setTemplates(templates.map(t => t.id === templateData.id ? templateData : t));
+                setShiftTemplates(templates.map(t => t.id === templateData.id ? templateData : t));
                 alert("Template updated successfully!");
             } else {
                 const docRef = await addDoc(collection(db, `artifacts/${appId}/public/data/shiftTemplates`), templateData);
-                setTemplates([...templates, { id: docRef.id, ...templateData }]);
+                setShiftTemplates([...templates, { id: docRef.id, ...templateData }]);
                 alert("Template created successfully!");
             }
             setEditingTemplate(null);
@@ -115,7 +115,7 @@ const TemplateManager = ({ templates, setTemplates, allUsers }) => {
         if (window.confirm("Are you sure you want to delete this template?")) {
             try {
                 await deleteDoc(doc(db, `artifacts/${appId}/public/data/shiftTemplates`, templateId));
-                setTemplates(templates.filter(t => t.id !== templateId));
+                setShiftTemplates(templates.filter(t => t.id !== templateId));
                 alert("Template deleted successfully!");
             } catch (error) {
                 console.error("Error deleting template: ", error);
@@ -788,7 +788,7 @@ const ShiftCreator = ({ allUsers }) => {
                 )}
                 
                 {activeTab === 'templates' && (
-                    <TemplateManager templates={shiftTemplates} setTemplates={setTemplates} allUsers={allUsers} />
+                    <TemplateManager templates={shiftTemplates} setShiftTemplates={setShiftTemplates} allUsers={allUsers} />
                 )}
 
                 {activeTab === 'scheduled' && (
