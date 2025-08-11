@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Clock, ArrowLeft, LogIn, LogOut, Briefcase, ChevronRight, Delete } from 'lucide-react';
 
 const PinPad = ({ onKeyPress, onClear, onDelete, onSubmit, disabled, pin, pinLength }) => {
@@ -52,6 +52,8 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
     const [userPin, setUserPin] = useState('');
     const [message, setMessage] = useState('');
     const todayISO = new Date().toISOString().split('T')[0];
+    
+    const activityTimeoutRef = useRef(null);
 
     const [time, setTime] = useState(new Date());
     useEffect(() => {
@@ -59,10 +61,42 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         return () => clearInterval(timer);
     }, []);
 
+    const resetUser = useCallback(() => {
+        if (activityTimeoutRef.current) {
+            clearTimeout(activityTimeoutRef.current);
+        }
+        setSelectedUser(null);
+        setUserPin('');
+        setMessage('');
+        setView('login');
+    }, []);
+
     const currentUserCheckIn = useMemo(() => {
         if (!selectedUser) return null;
         return dailyCheckIns.find(ci => ci.userId === selectedUser.uid && ci.checkInDate === todayISO && !ci.checkOutTime);
     }, [selectedUser, dailyCheckIns, todayISO]);
+
+    useEffect(() => {
+        if (activityTimeoutRef.current) {
+            clearTimeout(activityTimeoutRef.current);
+        }
+
+        if (view === 'class_selection' && selectedUser) {
+            const timeoutDuration = 20000; // 20-second inactivity timeout
+            
+            activityTimeoutRef.current = setTimeout(() => {
+                console.log(`Inactivity timeout reached. Returning to login.`);
+                resetUser();
+            }, timeoutDuration);
+        }
+
+        return () => {
+            if (activityTimeoutRef.current) {
+                clearTimeout(activityTimeoutRef.current);
+            }
+        };
+    }, [view, selectedUser, resetUser]);
+
 
     const handleDevicePinSubmit = (e) => {
         e.preventDefault();
@@ -75,7 +109,7 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
             setDevicePin('');
         }
     };
-
+    
     const handleDevicePinChange = (e) => {
         const newPin = e.target.value;
         if (/^\d*$/.test(newPin) && newPin.length <= 10) {
@@ -90,7 +124,6 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
             setUserPin('');
             return;
         }
-        // Using timeClockPin as the definitive source per previous request
         if (String(selectedUser.timeClockPin) !== userPin) {
             setMessage("Invalid PIN. Please try again.");
             setUserPin('');
@@ -107,66 +140,69 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         }
     };
 
-    const resetUser = () => {
-        setSelectedUser(null);
-        setUserPin('');
-        setMessage('');
-        setView('login');
-    };
-
     const handleClassSelect = async (classId) => {
+        if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
+        
         const course = classes.find(c => c.id === classId);
         try {
             await handleClassCheckIn(selectedUser, course, null);
-            alert(`Successfully clocked into class: ${course.name}.`);
+            setView('message');
+            setMessage(`Successfully clocked into class: ${course.name}.`);
+            setTimeout(resetUser, 5000); // 5-second delay
         } catch (error) {
             console.error("Failed to check into class:", error);
-            alert("Error: Could not check into the class. Please try again.");
-        } finally {
-            resetUser();
+            setMessage("Error: Could not check into the class. Please try again.");
+            setTimeout(resetUser, 5000); // 5-second delay
         }
     };
 
     const handleStationSelect = async (stationId) => {
+        if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
+
         const station = stations.find(s => s.id === stationId);
         const course = classes.find(c => c.id === station.classId);
         try {
             await handleClassCheckIn(selectedUser, course, station);
-            alert(`Successfully checked into station: ${station.name}.`);
+            setView('message');
+            setMessage(`Successfully checked into station: ${station.name}.`);
+            setTimeout(resetUser, 5000); // 5-second delay
         } catch (error) {
             console.error("Failed to check into station:", error);
-            alert("Error: Could not check into the station. Please try again.");
-        } finally {
-            resetUser();
+            setMessage("Error: Could not check into the station. Please try again.");
+            setTimeout(resetUser, 5000); // 5-second delay
         }
     };
 
     const handleStationCheckout = async () => {
+        if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
+        
         try {
             await handleClassCheckOut(currentUserCheckIn.id);
-            alert(`Successfully checked out of station.`);
+            setView('message');
+            setMessage(`Successfully checked out of station.`);
+            setTimeout(resetUser, 5000); // 5-second delay
         } catch (error) {
             console.error("Failed to check out of station:", error);
-            alert("Error: Could not check out of the station. Please try again.");
-        } finally {
-            resetUser();
+            setMessage("Error: Could not check out of the station. Please try again.");
+            setTimeout(resetUser, 5000); // 5-second delay
         }
     };
 
     const handleClassCheckout = async () => {
+        if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
+        
         try {
             await handleClassCheckOut(currentUserCheckIn.id);
-            alert(`Successfully checked out of class.`);
+            setView('message');
+            setMessage(`Successfully checked out of class.`);
+            setTimeout(resetUser, 5000); // 5-second delay
         } catch (error) {
             console.error("Failed to check out of class:", error);
-            alert("Error: Could not check out of the class. Please try again.");
-        } finally {
-            resetUser();
+            setMessage("Error: Could not check out of the class. Please try again.");
+            setTimeout(resetUser, 5000); // 5-second delay
         }
     };
 
-    // --- The rest of your component remains the same ---
-    
     const renderDeviceLogin = () => (
         <form onSubmit={handleDevicePinSubmit} className="w-full max-w-sm bg-white rounded-xl shadow-lg p-8 space-y-6">
             <div className="flex justify-center mb-4">
@@ -248,7 +284,6 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
 
     const renderActionScreen = () => {
         if (!selectedUser) {
-             // This case should ideally not be reached if view logic is correct, but as a fallback:
             return <p>Please select a user.</p>;
         }
 
@@ -258,7 +293,7 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                 <div>
                     <h2 className="text-2xl font-bold mb-4">Welcome, {selectedUser.firstName}</h2>
                     <p className="mb-6">You are not clocked in. Please select a class to clock into.</p>
-                    {enrolledClasses.map(course => (
+                    {enrolledClasses.length > 0 ? enrolledClasses.map(course => (
                         <button key={course.id} onClick={() => handleClassSelect(course.id)} className="w-full text-left p-4 mb-3 bg-white rounded-lg shadow hover:bg-gray-50 flex justify-between items-center">
                             <div>
                                 <p className="font-semibold">{course.name}</p>
@@ -266,13 +301,21 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                             </div>
                             <LogIn className="h-5 w-5 text-green-500" />
                         </button>
-                    ))}
+                    )) : <p>No available classes for enrollment.</p>}
                 </div>
             );
         }
 
         if (currentUserCheckIn && !currentUserCheckIn.stationId) {
             const availableStations = stations.filter(s => s.classId === currentUserCheckIn.classId);
+            if (availableStations.length === 0) {
+                return (
+                     <div>
+                        <h2 className="text-2xl font-bold mb-2">You are now checked into {classes.find(c => c.id === currentUserCheckIn.classId)?.name}.</h2>
+                        <p className="mb-6">There are no stations to select for this class. Returning to login shortly...</p>
+                    </div>
+                );
+            }
             return (
                 <div>
                     <h2 className="text-2xl font-bold mb-2">You are clocked into {classes.find(c => c.id === currentUserCheckIn.classId)?.name}.</h2>
@@ -305,13 +348,23 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
             );
         }
     };
+    
+    const renderMessageScreen = () => {
+        return (
+            <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl p-6 sm:p-8 text-center">
+                <h2 className="text-2xl font-bold mb-4">{message}</h2>
+                <p>Returning to the login screen...</p>
+            </div>
+        )
+    }
 
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
             {view === 'device_login' && renderDeviceLogin()}
             {view === 'login' && renderUserLogin()}
+            {view === 'message' && renderMessageScreen()}
 
-            {view !== 'login' && view !== 'device_login' && (
+            {view === 'class_selection' && (
                 <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl p-6 sm:p-8 relative">
                      <button onClick={resetUser} className="absolute top-6 left-6 flex items-center text-sm text-gray-600 hover:text-gray-900">
                         <ArrowLeft size={16} className="mr-1" /> Back to User Select
