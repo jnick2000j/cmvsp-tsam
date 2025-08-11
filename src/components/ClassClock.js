@@ -1,38 +1,28 @@
-import React, { useState, useMemo } from 'react';
-import { Clock, ArrowLeft, LogIn, LogOut, Briefcase, ChevronRight } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Clock, ArrowLeft, LogIn, LogOut, Briefcase, ChevronRight, Delete } from 'lucide-react';
 
-const PinPad = ({ onPinSubmit, onPinChange, pin, pinLength, disabled }) => {
-    const buttons = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
-
-    const handleButtonClick = (value) => {
-        if (disabled) return;
-        if (value === '⌫') {
-            onPinChange(pin.slice(0, -1));
-        } else if (pin.length < pinLength) {
-            onPinChange(pin + value);
-        }
-    };
-
+const PinPad = ({ onKeyPress, onClear, onDelete, onSubmit, disabled, pin, pinLength }) => {
     return (
         <div className={`w-full max-w-xs mx-auto ${disabled ? 'opacity-50' : ''}`}>
-            <div className="grid grid-cols-3 gap-2">
-                {buttons.map((btn, i) => (
-                    <button
-                        key={i}
-                        type="button"
-                        onClick={() => handleButtonClick(btn)}
-                        disabled={!btn || disabled}
-                        className={`h-16 text-2xl font-semibold rounded-lg transition-colors ${
-                            btn ? 'bg-gray-200 hover:bg-gray-300' : 'bg-transparent'
-                        }`}
-                    >
-                        {btn}
+            <div className="grid grid-cols-3 gap-4">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
+                    <button key={num} onClick={() => onKeyPress(num.toString())} disabled={disabled} className="py-4 text-2xl font-bold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent transition-all duration-150 ease-in-out">
+                        {num}
                     </button>
                 ))}
+                <button onClick={onClear} disabled={disabled} className="py-4 text-xl font-bold text-gray-700 bg-yellow-400 rounded-lg hover:bg-yellow-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 transition-all duration-150 ease-in-out">
+                    Clear
+                </button>
+                <button onClick={() => onKeyPress('0')} disabled={disabled} className="py-4 text-2xl font-bold text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent transition-all duration-150 ease-in-out">
+                    0
+                </button>
+                <button onClick={onDelete} disabled={disabled} className="py-4 text-xl font-bold text-white bg-red-500 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all duration-150 ease-in-out flex items-center justify-center">
+                    <Delete size={24} />
+                </button>
             </div>
-            <button
+             <button
                 type="button"
-                onClick={() => onPinSubmit(pin)}
+                onClick={onSubmit}
                 disabled={disabled || pin.length !== pinLength}
                 className="w-full mt-4 h-14 bg-green-500 text-white text-lg font-bold rounded-lg hover:bg-green-600 disabled:bg-gray-400"
             >
@@ -44,20 +34,26 @@ const PinPad = ({ onPinSubmit, onPinChange, pin, pinLength, disabled }) => {
 
 
 const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckIn, handleClassCheckOut, branding, timeClocks }) => {
-    const [view, setView] = useState('device_login'); // Start with device login
+    const [view, setView] = useState('device_login');
     const [devicePin, setDevicePin] = useState('');
     const [selectedUser, setSelectedUser] = useState(null);
     const [userPin, setUserPin] = useState('');
     const [message, setMessage] = useState('');
     const todayISO = new Date().toISOString().split('T')[0];
+    
+    const [time, setTime] = useState(new Date());
+    useEffect(() => {
+        const timer = setInterval(() => setTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
 
     const currentUserCheckIn = useMemo(() => {
         if (!selectedUser) return null;
         return dailyCheckIns.find(ci => ci.userId === selectedUser.uid && ci.checkInDate === todayISO && !ci.checkOutTime);
     }, [selectedUser, dailyCheckIns, todayISO]);
 
-    const handleDevicePinSubmit = (submittedPin) => {
-        const authorizedDevice = timeClocks.find(tc => tc.pin === submittedPin);
+    const handleDevicePinSubmit = () => {
+        const authorizedDevice = timeClocks.find(tc => tc.pin === devicePin);
         if (authorizedDevice) {
             setMessage('');
             setView('login');
@@ -66,20 +62,34 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
             setDevicePin('');
         }
     };
+    
+    const handleDevicePinChange = (e) => {
+        const newPin = e.target.value;
+        if (/^\d*$/.test(newPin) && newPin.length <= 10) {
+            setDevicePin(newPin);
+        }
+    };
 
-    const handleUserLogin = (submittedPin) => {
+    const handleUserLogin = () => {
         if (!selectedUser) {
             setMessage("Please select your name first.");
             setUserPin('');
             return;
         }
-        if (selectedUser.pin !== submittedPin) {
+        if (selectedUser.pin !== userPin) {
             setMessage("Invalid PIN. Please try again.");
             setUserPin('');
             return;
         }
         setMessage('');
         setView('class_selection');
+    };
+
+    const handleUserPinChange = (e) => {
+        const newPin = e.target.value;
+        if (/^\d*$/.test(newPin) && newPin.length <= 4) {
+            setUserPin(newPin);
+        }
     };
 
     const handleClassSelect = async (classId) => {
@@ -113,39 +123,61 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         setSelectedUser(null);
         setUserPin('');
         setMessage('');
-        setView('login'); // Go back to user selection, not device login
+        setView('login');
     };
 
-    // --- RENDER LOGIC ---
-
     const renderDeviceLogin = () => (
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 sm:p-8">
-            <h1 className="text-2xl font-bold text-gray-800 text-center mb-4">Device Authorization</h1>
-            <p className="text-center text-gray-600 mb-6">Enter the 10-digit device PIN to continue.</p>
-            <div className="w-full max-w-xs mx-auto text-center mb-4">
+        <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
+            <h2 className="text-4xl font-bold text-center text-gray-800">Training Clock Login</h2>
+            
+            <div className="text-center">
+                <p className="text-6xl font-mono font-bold text-gray-900 tracking-wider">
+                    {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
+                <p className="text-xl text-gray-500">
+                    {time.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+            </div>
+            
+            <p className="text-center text-gray-600">Enter the 10-digit device PIN to continue.</p>
+            
+            <div className="relative">
                 <input
                     type="password"
-                    readOnly
                     value={devicePin}
-                    onChange={(e) => setDevicePin(e.target.value)} // Allow typing
-                    className="w-full tracking-[0.5em] text-center text-3xl bg-gray-100 border-2 rounded-lg p-2"
+                    onChange={handleDevicePinChange}
                     placeholder="**********"
                     maxLength="10"
+                    className="w-full px-4 py-3 text-3xl tracking-[0.2em] text-center bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
                 />
             </div>
+
             {message && <p className="text-red-500 text-center text-sm mb-2">{message}</p>}
+            
             <PinPad 
                 pin={devicePin} 
-                onPinChange={setDevicePin} 
-                onPinSubmit={handleDevicePinSubmit} 
                 pinLength={10}
+                onKeyPress={(key) => { if (devicePin.length < 10) setDevicePin(devicePin + key) }}
+                onDelete={() => setDevicePin(devicePin.slice(0, -1))}
+                onClear={() => setDevicePin('')}
+                onSubmit={handleDevicePinSubmit}
             />
         </div>
     );
 
     const renderUserLogin = () => (
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 sm:p-8">
-            <h1 className="text-2xl font-bold text-gray-800 text-center mb-4">Class Clock</h1>
+        <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-xl shadow-lg">
+            <h2 className="text-4xl font-bold text-center text-gray-800">Training Class Login</h2>
+            
+            <div className="text-center">
+                <p className="text-6xl font-mono font-bold text-gray-900 tracking-wider">
+                    {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
+                <p className="text-xl text-gray-500">
+                    {time.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+            </div>
+            
             <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">1. Select Your Name</label>
                 <select
@@ -169,21 +201,25 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                     2. Enter Your PIN {selectedUser && `for ${selectedUser.firstName}`}
                 </label>
-                <div className="w-full max-w-xs mx-auto text-center mb-4">
+                <div className="relative">
                     <input
                         type="password"
-                        readOnly
                         value={userPin}
-                        className="w-48 tracking-[1em] text-center text-3xl bg-gray-100 border-2 rounded-lg p-2"
-                        placeholder="● ● ● ●"
+                        onChange={handleUserPinChange}
+                        placeholder="••••"
+                        maxLength="4"
+                        className="w-full px-4 py-3 text-3xl tracking-[0.5em] text-center bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent"
+                        disabled={!selectedUser}
                     />
                 </div>
-                {message && <p className="text-red-500 text-center text-sm mb-2">{message}</p>}
+                {message && <p className="text-red-500 text-center text-sm mt-2 mb-2">{message}</p>}
                 <PinPad 
                     pin={userPin} 
-                    onPinChange={setUserPin} 
-                    onPinSubmit={handleUserLogin} 
                     pinLength={4}
+                    onKeyPress={(key) => { if (userPin.length < 4) setUserPin(userPin + key) }}
+                    onDelete={() => setUserPin(userPin.slice(0, -1))}
+                    onClear={() => setUserPin('')}
+                    onSubmit={handleUserLogin}
                     disabled={!selectedUser} 
                 />
             </div>
@@ -191,7 +227,6 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
     );
 
     const renderActionScreen = () => {
-        // Not clocked in at all
         if (!currentUserCheckIn) {
             const enrolledClasses = classes.filter(c => selectedUser.enrolledClasses?.includes(c.id) && !c.isCompleted);
             return (
@@ -211,7 +246,6 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
             );
         }
 
-        // Clocked into a class, but not a station
         if (currentUserCheckIn && !currentUserCheckIn.stationId) {
             const availableStations = stations.filter(s => s.classId === currentUserCheckIn.classId);
             return (
@@ -228,7 +262,6 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
             );
         }
 
-        // Clocked into a station
         if (currentUserCheckIn && currentUserCheckIn.stationId) {
             const currentStation = stations.find(s => s.id === currentUserCheckIn.stationId);
             return (
