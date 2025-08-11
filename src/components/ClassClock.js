@@ -90,7 +90,7 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
             setUserPin('');
             return;
         }
-        if (String(selectedUser.pin) !== userPin) {
+        if (String(selectedUser.timeClockPin) !== userPin) {
             setMessage("Invalid PIN. Please try again.");
             setUserPin('');
             return;
