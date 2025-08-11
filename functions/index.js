@@ -73,14 +73,15 @@ exports.createUserAccount = onCall(async (request) => {
 exports.enrollStudent = onCall(async (request) => {
     const { classId, studentId } = request.data;
     const uid = request.auth?.uid;
+    const appId = "cmvsp-tsam"; // Your specific app ID.
 
     if (!uid) {
         throw new HttpsError('unauthenticated', 'You must be logged in to perform this action.');
     }
 
     const db = getFirestore();
-    // **Correction**: The collection path should be the full path used on the client-side.
-    const classRef = db.doc(`artifacts/cmvsp-tsam/public/data/classes/${classId}`);
+    // **FIX:** The database path now correctly points to the nested 'classes' collection.
+    const classRef = db.doc(`artifacts/${appId}/public/data/classes/${classId}`);
     const studentRef = db.collection('users').doc(studentId);
 
     const callingUserDoc = await db.collection('users').doc(uid).get();

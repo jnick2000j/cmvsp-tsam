@@ -123,9 +123,9 @@ export default function App() {
         };
 
         const unsubscribers = Object.entries(collectionsToWatch).map(([name, setter]) => {
-            // **FIX:** Corrected the query path logic to check for 'users' or 'waivers' as top-level collections.
-            const isTopLevel = name === 'users' || name === 'waivers';
-            const path = isTopLevel ? name : `artifacts/${appId}/public/data/${name}`;
+            // **FIX:** Reverted the logic to treat `users` as the only top-level collection.
+            // `waivers` is now correctly fetched from within the `artifacts` path.
+            const path = name === 'users' ? name : `artifacts/${appId}/public/data/${name}`;
             const q = query(collection(db, path));
             
             return onSnapshot(q, (snapshot) => {
@@ -430,7 +430,7 @@ export default function App() {
                     stations, 
                     shifts, 
                     dailyCheckIns, 
-                    timeClockEntries, // Pass the time clock entries for patrol data
+                    timeClockEntries,
                     handleClassCheckIn, 
                     handleClassCheckOut,
                     handleShiftCheckIn,
