@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot, query, updateDoc, addDoc, getDocs, where, serverTimestamp, arrayRemove, arrayUnion, runTransaction } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig';
-import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROL_LEADER_ROLES, PATROL_ADMIN_ROLES, appId } from './constants'; // Assuming PATROL_ADMIN_ROLES exists in constants.js
+import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROL_LEADER_ROLES, PATROL_ADMIN_ROLES, appId } from './constants';
 
 // Import All Components
 import AuthComponent from './components/AuthComponent';
@@ -51,6 +51,7 @@ export default function App() {
     const [shifts, setShifts] = useState([]);
     const [timeClockEntries, setTimeClockEntries] = useState([]);
     const [timeClocks, setTimeClocks] = useState([]);
+    const [enrollmentRequests, setEnrollmentRequests] = useState([]); // New state for approvals
     const [loginMessage, setLoginMessage] = useState('');
     const [view, setView] = useState('dashboard');
     const [subView, setSubView] = useState('');
@@ -117,7 +118,8 @@ export default function App() {
             attendanceRecords: setAttendanceRecords,
             shifts: setShifts,
             timeClockEntries: setTimeClockEntries,
-            timeclocks: setTimeClocks
+            timeclocks: setTimeClocks,
+            enrollmentRequests: setEnrollmentRequests // Fetch enrollment requests
         };
 
         const unsubscribers = Object.entries(collectionsToWatch).map(([name, setter]) => {
@@ -422,12 +424,13 @@ export default function App() {
                 return <MyTraining {...{ user, enrolledClassesDetails, dailyCheckIns, setActiveClassId, handlePrerequisiteCheckin, handleCancelEnrollment, allUsers, classes, stations, checkIns, generateClassPdf }} />;
             case 'attendance': 
                 return <AttendanceTabs {...{ 
-                    currentUser: user, 
+                    currentUser: user,
                     allUsers, 
                     classes, 
                     stations, 
                     shifts, 
-                    dailyCheckIns, 
+                    dailyCheckIns,
+                    enrollmentRequests,
                     timeClockEntries, 
                     handleClassCheckIn, 
                     handleClassCheckOut,
@@ -532,7 +535,7 @@ export default function App() {
                     </nav>
                 </div>
             </header>
-            <main className="max-w-7xl mx-auto">
+            <main>
                 {renderContent()}
             </main>
             {isTradeModalOpen && (
