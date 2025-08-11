@@ -3,9 +3,14 @@ const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { RRule } = require('rrule');
+// Import the 'defineString' function to handle environment variables more reliably.
+const { defineString } = require('firebase-functions/params');
 
 // Initialize the Firebase Admin SDK
 initializeApp();
+
+// Define the APP_ID variable here using the recommended Firebase method.
+const appIdentifier = defineString("APP_ID");
 
 /**
  * Creates a new user account in Firebase Authentication and a corresponding
@@ -69,14 +74,16 @@ exports.createUserAccount = onCall(async (request) => {
  * Allows a logged-in user to enroll themselves in a class.
  */
 exports.selfEnroll = onCall(async (request) => {
-    const appId = process.env.APP_ID;
+    // Use the value() method on the defined variable.
+    const appId = appIdentifier.value();
+    
     if (!appId) {
         console.error("FATAL ERROR: The APP_ID environment variable is not set.");
         throw new HttpsError('internal', 'The server is missing critical configuration.');
     }
 
     const { classId } = request.data;
-    const uid = request.auth?.uid; // The user enrolling themselves
+    const uid = request.auth?.uid;
 
     if (!uid) {
         throw new HttpsError('unauthenticated', 'You must be logged in to enroll.');
@@ -100,7 +107,7 @@ exports.selfEnroll = onCall(async (request) => {
 
         batch.set(enrollmentRef, {
             enrolledAt: FieldValue.serverTimestamp(),
-            enrolledBy: uid // The user enrolled themselves
+            enrolledBy: uid
         });
         batch.update(studentRef, {
             enrolledClasses: FieldValue.arrayUnion(classId)

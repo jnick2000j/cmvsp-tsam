@@ -1,94 +1,74 @@
 // src/components/CourseCatalog.js
 import React, { useState, useMemo } from 'react';
-import { Calendar, MapPin, Hourglass, Search } from 'lucide-react';
+import { functions } from '../firebaseConfig';
+import { httpsCallable } from 'firebase/functions';
 
-const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError, logoUrl }) => {
-    const [searchTerm, setSearchTerm] = useState('');
+const CourseCatalog = ({ currentUser, classes }) => {
+    const [enrollingClassId, setEnrollingClassId] = useState(null);
 
-    const getLeadInstructorName = (instructorId) => {
-        const instructor = allUsers.find(u => u.id === instructorId);
-        return instructor ? `${instructor.firstName} ${instructor.lastName}` : 'N/A';
+    // Filter for classes that are not hidden
+    const visibleClasses = useMemo(() => {
+        return classes.filter(cls => !cls.isHidden);
+    }, [classes]);
+
+    const handleSelfEnroll = async (classId) => {
+        if (!currentUser) {
+            alert("You must be logged in to enroll.");
+            return;
+        }
+        setEnrollingClassId(classId);
+        const selfEnrollFn = httpsCallable(functions, 'selfEnroll');
+        try {
+            const result = await selfEnrollFn({ classId });
+            if (result.data.success) {
+                alert(result.data.message);
+                // The user's enrolledClasses array will update automatically via the onSnapshot listener in App.js
+            } else {
+                throw new Error(result.data.message);
+            }
+        } catch (error) {
+            console.error("Self-enrollment failed:", error);
+            alert(`Error: ${error.message}`);
+        }
+        setEnrollingClassId(null);
     };
 
-    const visibleClasses = useMemo(() => {
-        return classes
-            .filter(course => {
-                // Filter out hidden or completed classes
-                if (course.isHidden || course.isCompleted) {
-                    return false;
-                }
-                // Filter by role visibility
-                if (course.visibleToRoles && course.visibleToRoles.length > 0) {
-                    return course.visibleToRoles.includes(user.role);
-                }
-                return true; // Show if no roles are specified
-            })
-            .filter(course => 
-                course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (getLeadInstructorName(course.leadInstructorId) || '').toLowerCase().includes(searchTerm.toLowerCase())
-            );
-    }, [classes, searchTerm, user, allUsers, getLeadInstructorName]);
+    const isUserEnrolled = (classId) => {
+        return currentUser?.enrolledClasses?.includes(classId);
+    };
+
+    if (!classes) {
+        return <div className="text-center p-8">Loading classes...</div>;
+    }
 
     return (
-        <div className="p-4 sm:p-6 lg:p-8 space-y-6">
-            <div className="sm:flex sm:items-center sm:justify-between">
-                <div className="flex items-center space-x-4">
-                    {logoUrl && <img src={logoUrl} alt="Catalog Logo" className="h-12" />}
-                    <div>
-                        <h2 className="text-2xl font-bold text-gray-900">Course Catalog</h2>
-                        <p className="mt-1 text-sm text-gray-500">Browse and enroll in available courses.</p>
-                    </div>
-                </div>
-                <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                        <input
-                            type="text"
-                            placeholder="Search courses..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border rounded-md"
-                        />
-                    </div>
-                </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {visibleClasses.map(course => {
-                    const isEnrolled = user.enrolledClasses?.includes(course.id);
-                    const isPast = new Date(course.endDate) < new Date();
-                    return (
-                        <div key={course.id} className={`bg-white rounded-xl shadow-lg overflow-hidden flex flex-col ${isPast ? 'opacity-60' : ''}`}>
-                            <div className="p-5 border-b">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <h3 className="text-lg font-bold text-gray-800">{course.name}</h3>
-                                        <p className="text-sm text-gray-500">Lead Instructor: {getLeadInstructorName(course.leadInstructorId)}</p>
-                                    </div>
-                                    {isPast && <span className="text-xs font-semibold bg-gray-200 text-gray-700 px-2 py-1 rounded-full">CLOSED</span>}
-                                </div>
-                            </div>
-                            <div className="p-5 flex-grow space-y-3 text-sm">
-                                {course.summary && <p className="text-gray-600">{course.summary}</p>}
-                                <div className="flex items-center text-gray-500"><Calendar className="h-4 w-4 mr-2" /><span>{course.startDate} to {course.endDate}</span></div>
-                                <div className="flex items-center text-gray-500"><MapPin className="h-4 w-4 mr-2" /><span>{course.location}</span></div>
-                                <div className="flex items-center text-gray-500"><Hourglass className="h-4 w-4 mr-2" /><span>{course.hours} hours</span></div>
-                            </div>
-                            <div className="p-4 bg-gray-50 border-t">
+        <div className="container mx-auto p-4">
+            <h1 className="text-3xl font-bold mb-6">Course Catalog</h1>
+            {visibleClasses.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {visibleClasses.map(cls => (
+                        <div key={cls.id} className="border rounded-lg shadow-lg p-4 flex flex-col bg-white">
+                            <h2 className="text-xl font-semibold mb-2">{cls.name}</h2>
+                            <p className="text-gray-600 mb-1"><strong>Location:</strong> {cls.location || 'N/A'}</p>
+                            <p className="text-gray-600 mb-1"><strong>Dates:</strong> {cls.startDate} to {cls.endDate}</p>
+                            <p className="text-gray-700 mt-2 flex-grow">{cls.summary || 'No summary available.'}</p>
+                            <div className="mt-4">
                                 <button
-                                    onClick={() => onEnrollClick(course.id)}
-                                    disabled={isEnrolled || isPast}
-                                    className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-green-600 disabled:cursor-not-allowed"
+                                    onClick={() => handleSelfEnroll(cls.id)}
+                                    disabled={isUserEnrolled(cls.id) || enrollingClassId === cls.id}
+                                    className="w-full px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                                 >
-                                    {isEnrolled ? 'Enrolled' : isPast ? 'Closed' : 'Enroll Now'}
+                                    {isUserEnrolled(cls.id) ? 'Enrolled' : (enrollingClassId === cls.id ? 'Enrolling...' : 'Self-Enroll')}
                                 </button>
-                                {enrollmentError && enrollmentError.classId === course.id && (
-                                    <p className="text-xs text-red-600 mt-2 text-center">{enrollmentError.message}</p>
-                                )}
                             </div>
                         </div>
-                    );
-                })}
-            </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="text-center p-8 text-gray-500">
+                    There are no courses available for enrollment at this time.
+                </div>
+            )}
         </div>
     );
 };

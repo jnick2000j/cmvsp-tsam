@@ -433,6 +433,7 @@ export default function App() {
                     handleShiftCheckOut
                 }} />;
             
+            // **FIX: Pass the 'classes' prop from the App state to the CourseCatalog component.**
             case 'catalog': 
                 return <CourseCatalog currentUser={user} classes={classes} />;
 
