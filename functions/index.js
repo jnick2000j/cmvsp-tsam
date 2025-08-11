@@ -3,13 +3,10 @@ const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { RRule } = require('rrule');
-// Import the 'defineString' function to handle environment variables more reliably.
 const { defineString } = require('firebase-functions/params');
 
-// Initialize the Firebase Admin SDK
 initializeApp();
 
-// Define the APP_ID variable here using the recommended Firebase method.
 const appIdentifier = defineString("APP_ID");
 
 /**
@@ -74,7 +71,6 @@ exports.createUserAccount = onCall(async (request) => {
  * Allows a logged-in user to enroll themselves in a class.
  */
 exports.selfEnroll = onCall(async (request) => {
-    // Use the value() method on the defined variable.
     const appId = appIdentifier.value();
     
     if (!appId) {
@@ -97,9 +93,25 @@ exports.selfEnroll = onCall(async (request) => {
     const studentRef = db.doc(`users/${uid}`);
 
     try {
-        const classDoc = await classRef.get();
-        if (!classDoc.exists || classDoc.data().isHidden) {
+        const [classDoc, studentDoc] = await Promise.all([classRef.get(), studentRef.get()]);
+        
+        const classData = classDoc.data();
+        const studentData = studentDoc.data();
+
+        if (!classDoc.exists || classData.isCompleted || classData.isClosedForEnrollment) {
             throw new HttpsError('not-found', 'This class is not available for enrollment.');
+        }
+        if (!studentDoc.exists) {
+            throw new HttpsError('not-found', 'Could not find your user profile.');
+        }
+        
+        const visibleToRoles = classData.visibleToRoles;
+        if (Array.isArray(visibleToRoles) && visibleToRoles.length > 0) {
+            const userRoles = studentData.roles || [];
+            const hasRequiredRole = userRoles.some(userRole => visibleToRoles.includes(userRole));
+            if (!hasRequiredRole) {
+                throw new HttpsError('permission-denied', 'You do not have the required training role to enroll in this class.');
+            }
         }
 
         const batch = db.batch();

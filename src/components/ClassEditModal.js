@@ -27,12 +27,12 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
         onChange(newSelected);
     };
 
-    const selectedNames = selected.join(', ');
+    const selectedNames = selected.length > 0 ? selected.join(', ') : placeholder;
 
     return (
         <div className="relative" ref={dropdownRef}>
             <button type="button" onClick={() => setIsOpen(!isOpen)} className="w-full bg-white border border-gray-300 rounded-md shadow-sm pl-3 pr-10 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                <span className="block truncate">{selectedNames || placeholder}</span>
+                <span className="block truncate">{selectedNames}</span>
                 <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
                     <ChevronLeft className="h-5 w-5 text-gray-400 transform rotate-[-90deg]" />
                 </span>
@@ -60,6 +60,10 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
     const [formData, setFormData] = useState({});
     const [numGroups, setNumGroups] = useState(1);
     const [enrolledStudentsList, setEnrolledStudentsList] = useState([]);
+    const [selectedStudent, setSelectedStudent] = useState('');
+    const [isEnrolling, setIsEnrolling] = useState(false);
+
+    const allTrainingRoles = useMemo(() => ['Student', ...INSTRUCTOR_ROLES, ...SUPPORT_ROLES], []);
 
     const getInitialFormData = useCallback(() => ({
         name: '', 
@@ -72,10 +76,10 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         supportNeeds: [], 
         studentGroups: {}, 
         isPrerequisiteUploadRequired: false, 
-        isHidden: false, 
         visibleToRoles: [], 
         logoUrl: '', 
-        isCompleted: false
+        isCompleted: false,
+        isClosedForEnrollment: false,
     }), [currentUser]);
 
     const fetchEnrolledStudents = useCallback(async (classId) => {
@@ -207,6 +211,47 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                 <div className="p-6 border-b"><h2 className="text-2xl font-bold text-gray-800">{classToEdit ? 'Edit Class' : 'Add New Class'}</h2></div>
                 <div className="p-6 space-y-4 overflow-y-auto">
                     <div><label className="block text-sm font-medium text-gray-700">Class Name</label><input name="name" value={formData.name || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
+                    
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Visible to Training Roles</label>
+                        <MultiSelectDropdown
+                            options={allTrainingRoles}
+                            selected={formData.visibleToRoles || []}
+                            onChange={handleRoleVisibilityChange}
+                            placeholder="All Roles (Public)"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">If no roles are selected, the class will be visible to everyone.</p>
+                    </div>
+
+                    <div className="space-y-2 border-t pt-4 mt-4">
+                        <div className="flex items-center">
+                            <input
+                                id="isClosedForEnrollment"
+                                name="isClosedForEnrollment"
+                                type="checkbox"
+                                checked={formData.isClosedForEnrollment || false}
+                                onChange={handleInputChange}
+                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                            />
+                            <label htmlFor="isClosedForEnrollment" className="ml-2 block text-sm text-gray-900">
+                                Close enrollment for this class (keeps it in the catalog)
+                            </label>
+                        </div>
+                        <div className="flex items-center">
+                            <input
+                                id="isCompleted"
+                                name="isCompleted"
+                                type="checkbox"
+                                checked={formData.isCompleted || false}
+                                onChange={handleInputChange}
+                                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                            />
+                            <label htmlFor="isCompleted" className="ml-2 block text-sm text-gray-900">
+                                Mark this class as complete (removes from catalog)
+                            </label>
+                        </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <div><label className="block text-sm font-medium text-gray-700">Start Date</label><input type="date" name="startDate" value={formData.startDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                          <div><label className="block text-sm font-medium text-gray-700">End Date</label><input type="date" name="endDate" value={formData.endDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
