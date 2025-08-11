@@ -156,7 +156,7 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         try {
             await handleClassCheckOut(activeClassCheckIn.id);
             await handleClassCheckIn(selectedUser, currentClass, station);
-        } catch (error) {
+        } catch (error) { // **THIS WAS THE LINE WITH THE SYNTAX ERROR**
             console.error("Failed to check into station:", error);
             setMessage("Error: Could not check into the station. Please try again.");
             setTimeout(resetUser, 5000);
@@ -280,7 +280,7 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         if (!selectedUser) return <p>Please select a user.</p>;
 
         const logoutButton = (
-            <button onClick={resetUser} className="w-full mt-6 p-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 flex items-center justify-center">
+            <button onClick={resetUser} className="w-full mt-6 p-3 bg-accent text-white rounded-lg font-semibold hover:bg-accent-hover flex items-center justify-center">
                 <LogOut className="mr-2 h-5 w-5" /> Log Out of Time Clock
             </button>
         );
@@ -292,7 +292,6 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                     <h2 className="text-2xl font-bold mb-2">You are checked into station: {currentStation?.name}.</h2>
                     <p className="text-gray-600 mb-6">What would you like to do?</p>
                     <div className="space-y-4">
-                        {/* **REVISED: Applying branding colors** */}
                         <button onClick={handleStationCheckout} className="w-full p-4 bg-accent text-white rounded-lg font-semibold hover:bg-accent-hover flex items-center justify-center">
                             <LogOut className="mr-2 h-5 w-5" /> Check Out of Station
                         </button>
@@ -316,14 +315,13 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                             {availableStations.map(station => (
                                 <button key={station.id} onClick={() => handleStationSelect(station.id)} className="w-full text-left p-4 mb-3 bg-white rounded-lg shadow hover:bg-gray-50 flex justify-between items-center">
                                     <p className="font-semibold">{station.name}</p>
-                                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                                    <ChevronRight className="h-5 w-5 text-green-500" />
                                 </button>
                             ))}
                         </>
                     ) : (
                         <p className="mb-6">There are no stations available for this class.</p>
                     )}
-                    {/* **REVISED: Applying branding colors** */}
                     <button onClick={handleClassCheckout} className="w-full mt-4 p-4 bg-accent text-white rounded-lg font-semibold hover:bg-accent-hover flex items-center justify-center">
                         <LogOut className="mr-2 h-5 w-5" /> Check Out of Class
                     </button>
