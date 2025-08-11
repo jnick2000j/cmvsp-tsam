@@ -23,7 +23,7 @@ import ClassClock from './components/ClassClock';
 // --- SCHEDULING COMPONENTS ---
 import MySchedule from './components/MySchedule';
 import HelpUsOut from './components/HelpUsOut';
-import ShiftTradeModal from './components/ShiftTradeModal'; // Import the new modal
+import ShiftTradeModal from './components/ShiftTradeModal';
 
 import { generateClassPdf } from './utils/pdfGenerator';
 import { LayoutDashboard, ClipboardList, Library, Shield, Calendar, HelpingHand, UserCheck } from 'lucide-react';
@@ -60,7 +60,6 @@ export default function App() {
     const [confirmAction, setConfirmAction] = useState(null);
     const [enrollmentError, setEnrollmentError] = useState(null);
 
-    // --- State for Shift Trading ---
     const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
     const [tradeableShift, setTradeableShift] = useState(null);
     const [shiftTradeRequests, setShiftTradeRequests] = useState([]);
@@ -130,7 +129,6 @@ export default function App() {
             }, (err) => console.error(`Failed to load ${name}:`, err));
         });
 
-        // --- MODIFIED: Listener for pending shift trade requests now includes multiple statuses ---
         const tradeRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/shiftTradeRequests`), where('status', 'in', ['pending_user_approval', 'pending_leader_approval']));
         const unsubTrades = onSnapshot(tradeRequestsQuery, (snapshot) => {
             setShiftTradeRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -158,11 +156,9 @@ export default function App() {
     const handleNavClick = (mainView, sub = '') => { setView(mainView); setSubView(sub); };
     const handleConfirm = () => { if (confirmAction?.action) confirmAction.action(); setConfirmAction(null); };
 
-    // --- Shift Trading Handlers ---
     const handleOpenTradeModal = (shift) => { setTradeableShift(shift); setIsTradeModalOpen(true); };
     const handleCloseTradeModal = () => { setTradeableShift(null); setIsTradeModalOpen(false); };
 
-    // MODIFIED: Initial submission now waits for the other user's approval
     const handleSubmitShiftTrade = async ({ requesterShift, requestedUser, requestedShift }) => {
         if (!user || !requesterShift || !requestedUser || !requestedShift) return;
         await addDoc(collection(db, `artifacts/${appId}/public/data/shiftTradeRequests`), {
@@ -174,23 +170,21 @@ export default function App() {
             requestedUserName: `${requestedUser.firstName} ${requestedUser.lastName}`,
             requestedShiftId: requestedShift.id,
             requestedShiftInfo: `${new Date(requestedShift.date).toLocaleDateString()} - ${requestedShift.type}`,
-            status: 'pending_user_approval', // New initial status
-            approvals: { [user.uid]: true }, // Requester implicitly approves
+            status: 'pending_user_approval',
+            approvals: { [user.uid]: true },
             requestTimestamp: serverTimestamp(),
         });
         handleCloseTradeModal();
     };
     
-    // NEW: Handler for the second user to approve the trade
     const handleUserApproveShiftTrade = async (tradeRequest) => {
         const tradeRequestRef = doc(db, `artifacts/${appId}/public/data/shiftTradeRequests`, tradeRequest.id);
         await updateDoc(tradeRequestRef, {
-            status: 'pending_leader_approval', // Now moves to leadership for final approval
+            status: 'pending_leader_approval',
             approvals: { ...tradeRequest.approvals, [user.uid]: true }
         });
     };
 
-    // NEW: Handler for any party to deny/cancel the trade
     const handleDenyShiftTrade = async (tradeRequest) => {
         const tradeRequestRef = doc(db, `artifacts/${appId}/public/data/shiftTradeRequests`, tradeRequest.id);
         await updateDoc(tradeRequestRef, {
@@ -200,7 +194,6 @@ export default function App() {
         });
     };
 
-    // MODIFIED: This is now the FINAL leadership approval step
     const handleApproveShiftTrade = async (tradeRequest) => {
         const requesterShiftRef = doc(db, `artifacts/${appId}/public/data/shifts`, tradeRequest.requesterShiftId);
         const requestedShiftRef = doc(db, `artifacts/${appId}/public/data/shifts`, tradeRequest.requestedShiftId);
@@ -240,7 +233,6 @@ export default function App() {
         }
     };
     
-    // Omitted other handlers for brevity...
     const handlePrerequisiteCheckin = async (course) => {
         const todayISO = new Date().toISOString().split('T')[0];
         const checkInData = {
@@ -324,7 +316,6 @@ export default function App() {
     };
 
     const handleClassCheckIn = async (attendee, course, station) => {
-        // **FIXED: This function now correctly handles check-ins and includes more data.**
         try {
             if (!attendee || !course) {
                 throw new Error("Attendee or course information is missing.");
@@ -337,12 +328,11 @@ export default function App() {
                 role: attendee.role,
                 classId: course.id,
                 className: course.name,
-                // Safely handle cases where there is no station
                 stationId: station ? station.id : null,
                 stationName: station ? station.name : null,
                 checkInDate: todayISO,
                 checkInTime: serverTimestamp(),
-                checkOutTime: null, // Ensure checkout time is null on creation
+                checkOutTime: null,
                 status: 'pending',
             };
             
@@ -350,13 +340,11 @@ export default function App() {
             console.log("Successfully checked in with document ID:", docRef.id);
         } catch (error) {
             console.error("Error during class check-in:", error);
-            // This re-throws the error so the calling component (ClassClock) can catch it.
             throw error;
         }
     };
 
     const handleClassCheckOut = async (checkInId) => {
-        // **FIXED: Added error handling and validation.**
         try {
             if (!checkInId) {
                 throw new Error("No check-in ID provided for checkout.");
@@ -368,11 +356,46 @@ export default function App() {
             console.log("Successfully checked out for checkInId:", checkInId);
         } catch (error) {
             console.error("Error during class check-out:", error);
-            // This re-throws the error so the calling component can catch it.
+            throw error;
+        }
+    };
+    
+    // **REVISED: Implemented shift check-in/out logic**
+    const handleShiftCheckIn = async (user, shift, location) => {
+        try {
+            if (!user || !shift) {
+                throw new Error("User or shift information is missing.");
+            }
+            const checkInData = {
+                userId: user.uid,
+                userName: `${user.firstName} ${user.lastName}`,
+                shiftId: shift.id,
+                shiftName: shift.name,
+                location: location || "On-site",
+                checkInTime: serverTimestamp(),
+                checkOutTime: null,
+            };
+            await addDoc(collection(db, `artifacts/${appId}/public/data/shiftCheckIns`), checkInData);
+        } catch (error) {
+            console.error("Error during shift check-in:", error);
             throw error;
         }
     };
 
+    const handleShiftCheckOut = async (checkInId) => {
+        try {
+            if (!checkInId) {
+                throw new Error("No check-in ID provided for checkout.");
+            }
+            const checkInRef = doc(db, `artifacts/${appId}/public/data/shiftCheckIns`, checkInId);
+            await updateDoc(checkInRef, {
+                checkOutTime: serverTimestamp()
+            });
+        } catch (error) {
+            console.error("Error during shift check-out:", error);
+            throw error;
+        }
+    };
 
     if (isAuthLoading || (user && !user.firstName && !isTimeClockView && !isClassClockView)) {
         return <div className="flex items-center justify-center h-screen bg-gray-100"><div className="text-xl font-semibold text-gray-600">Loading Application...</div></div>;
@@ -396,7 +419,20 @@ export default function App() {
             case 'siteBranding': return <div className="p-4 sm:p-6 lg:p-8"><Branding branding={branding} onUpdate={setBranding} /></div>;
             case 'myTraining':
                 return <MyTraining {...{ user, enrolledClassesDetails, dailyCheckIns, setActiveClassId, handlePrerequisiteCheckin, handleCancelEnrollment, allUsers, classes, stations, checkIns, generateClassPdf }} />;
-            case 'attendance': return <AttendanceTabs {...{ user, allUsers, classes, stations, attendanceRecords, subView, setSubView }} />;
+            case 'attendance': 
+                return <AttendanceTabs {...{ 
+                    user, 
+                    allUsers, 
+                    classes, 
+                    stations, 
+                    shifts, 
+                    dailyCheckIns, 
+                    timeClockEntries, // Pass the time clock entries for patrol data
+                    handleClassCheckIn, 
+                    handleClassCheckOut,
+                    handleShiftCheckIn,
+                    handleShiftCheckOut
+                }} />;
             case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: handleEnroll, enrollmentError, branding }} />;
             case 'profile': return <ProfileManagement {...{ user, setConfirmAction }} />;
             
@@ -484,7 +520,7 @@ export default function App() {
                         
                         <button onClick={() => handleNavClick('catalog')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'catalog' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Library className="mr-1.5 h-4 w-4" />Course Catalog</button>
                         
-                        {isInstructor && (<button onClick={() => handleNavClick('attendance', 'checkInOut')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'attendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ClipboardList className="mr-1.5 h-4 w-4" />Attendance Management</button>)}
+                        {isInstructor && (<button onClick={() => handleNavClick('attendance')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'attendance' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ClipboardList className="mr-1.5 h-4 w-4" />Attendance Management</button>)}
                         
                         {isPatrolLeadership && <button onClick={() => handleNavClick('scheduleManagement')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'scheduleManagement' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserCheck className="mr-1.5 h-4 w-4" />Schedule Management</button>}
 
@@ -495,7 +531,6 @@ export default function App() {
             <main className="max-w-7xl mx-auto">
                 {renderContent()}
             </main>
-            {/* --- Render Shift Trade Modal --- */}
             {isTradeModalOpen && (
                 <ShiftTradeModal
                     isOpen={isTradeModalOpen}

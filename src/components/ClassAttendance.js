@@ -5,18 +5,30 @@ const ClassAttendance = ({ currentUser, users, classes, stations, dailyCheckIns,
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [selectedClass, setSelectedClass] = useState('');
 
-    const filteredCheckIns = useMemo(() => {
-        return dailyCheckIns.filter(ci => {
-            const matchesDate = ci.checkInDate === selectedDate;
-            const matchesClass = selectedClass ? ci.classId === selectedClass : true;
-            return matchesDate && matchesClass;
+    const attendanceData = useMemo(() => {
+        const dateFilteredCheckIns = dailyCheckIns.filter(ci => ci.checkInDate === selectedDate);
+        
+        const userStatus = {};
+
+        dateFilteredCheckIns.forEach(ci => {
+            if (!userStatus[ci.userId] || new Date(ci.checkInTime.seconds * 1000) > new Date(userStatus[ci.userId].checkInTime.seconds * 1000)) {
+                userStatus[ci.userId] = ci;
+            }
         });
+
+        let finalData = Object.values(userStatus);
+
+        if (selectedClass) {
+            finalData = finalData.filter(ci => ci.classId === selectedClass);
+        }
+
+        return finalData;
     }, [dailyCheckIns, selectedDate, selectedClass]);
 
     const canManage = (course) => {
+        if (!course || !currentUser) return false;
         if (currentUser.isAdmin) return true;
         if (course.leadInstructorId === currentUser.uid) return true;
-        // Add additional logic for station lead instructors if needed
         return false;
     };
 
@@ -53,7 +65,7 @@ const ClassAttendance = ({ currentUser, users, classes, stations, dailyCheckIns,
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredCheckIns.map(checkIn => {
+                        {attendanceData.map(checkIn => {
                             const user = users.find(u => u.uid === checkIn.userId);
                             const course = classes.find(c => c.id === checkIn.classId);
                             const station = stations.find(s => s.id === checkIn.stationId);
@@ -61,25 +73,19 @@ const ClassAttendance = ({ currentUser, users, classes, stations, dailyCheckIns,
 
                             return (
                                 <tr key={checkIn.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap">{user ? `${user.firstName} ${user.lastName}` : 'N/A'}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{course ? course.name : 'N/A'}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">{station ? station.name : 'N/A'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{checkIn.userName || 'N/A'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{checkIn.className || 'N/A'}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{checkIn.stationName || 'N/A'}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${isCheckedIn ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                                             {isCheckedIn ? 'Checked In' : 'Checked Out'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        {canManage(course) && (
-                                            isCheckedIn ? (
-                                                <button onClick={() => handleClassCheckOut(checkIn.id)} className="text-red-600 hover:text-red-900">
-                                                    <LogOut className="h-5 w-5" />
-                                                </button>
-                                            ) : (
-                                                <button onClick={() => handleClassCheckIn(user, course, station)} className="text-green-600 hover:text-green-900">
-                                                    <LogIn className="h-5 w-5" />
-                                                </button>
-                                            )
+                                        {canManage(course) && isCheckedIn && (
+                                            <button onClick={() => handleClassCheckOut(checkIn.id)} className="text-red-600 hover:text-red-900">
+                                                <LogOut className="h-5 w-5" />
+                                            </button>
                                         )}
                                     </td>
                                 </tr>

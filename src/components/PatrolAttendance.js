@@ -1,27 +1,26 @@
 import React, { useState, useMemo } from 'react';
 import { LogIn, LogOut, Edit } from 'lucide-react';
 
-const PatrolAttendance = ({ currentUser, users, shifts, handleShiftCheckIn, handleShiftCheckOut }) => {
+const PatrolAttendance = ({ currentUser, users, shifts, timeClockEntries, handleShiftCheckIn, handleShiftCheckOut }) => {
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [selectedShift, setSelectedShift] = useState('');
 
-    // This is a placeholder for shift check-in data. You will need to fetch this from your database.
-    const shiftCheckIns = []; 
+    const attendanceData = useMemo(() => {
+        const dateFilteredEntries = timeClockEntries.filter(entry => 
+            new Date(entry.clockInTime.seconds * 1000).toISOString().split('T')[0] === selectedDate
+        );
 
-    const filteredCheckIns = useMemo(() => {
-        return shiftCheckIns.filter(ci => {
-            const shift = shifts.find(s => s.id === ci.shiftId);
-            if (!shift) return false;
+        if (selectedShift) {
+            return dateFilteredEntries.filter(entry => entry.shiftId === selectedShift);
+        }
 
-            const matchesDate = shift.date === selectedDate;
-            const matchesShift = selectedShift ? ci.shiftId === selectedShift : true;
-            return matchesDate && matchesShift;
-        });
-    }, [shiftCheckIns, selectedDate, selectedShift, shifts]);
-
+        return dateFilteredEntries;
+    }, [timeClockEntries, selectedDate, selectedShift]);
+    
     const canManage = (shift) => {
+        if (!currentUser) return false;
         if (currentUser.isAdmin) return true;
-        // Add logic for patrol leaders and patrol shift leaders
+        // Add more specific patrol leadership roles here if needed
         return false;
     };
 
@@ -51,28 +50,36 @@ const PatrolAttendance = ({ currentUser, users, shifts, handleShiftCheckIn, hand
                     <thead className="bg-gray-50">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shift</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shift Type</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                        {/* This is a placeholder. You will need to map over your actual shift check-in data. */}
-                        <tr>
-                            <td className="px-6 py-4 whitespace-nowrap">John Doe</td>
-                            <td className="px-6 py-4 whitespace-nowrap">Morning Patrol</td>
-                            <td className="px-6 py-4 whitespace-nowrap">Summit</td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                                <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                    Checked In
-                                </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap flex space-x-2">
-                                <button className="text-red-600 hover:text-red-900"><LogOut className="h-5 w-5" /></button>
-                                <button className="text-blue-600 hover:text-blue-900"><Edit className="h-5 w-5" /></button>
-                            </td>
-                        </tr>
+                        {attendanceData.map(entry => {
+                            const isCheckedIn = !entry.clockOutTime;
+                            return (
+                                <tr key={entry.id}>
+                                    <td className="px-6 py-4 whitespace-nowrap">{entry.name}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{entry.shiftType}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">{entry.area}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${isCheckedIn ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                            {isCheckedIn ? 'Checked In' : 'Checked Out'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap flex space-x-2">
+                                        {canManage() && isCheckedIn && (
+                                            <>
+                                                <button onClick={() => handleShiftCheckOut(entry.id)} className="text-red-600 hover:text-red-900"><LogOut className="h-5 w-5" /></button>
+                                                <button className="text-blue-600 hover:text-blue-900"><Edit className="h-5 w-5" /></button>
+                                            </>
+                                        )}
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
