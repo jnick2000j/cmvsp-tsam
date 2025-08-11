@@ -83,7 +83,7 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
 
         if (view === 'class_selection' && selectedUser) {
-            const timeoutDuration = 15000; // **REVISED: Timeout set to 15 seconds**
+            const timeoutDuration = 15000;
             activityTimeoutRef.current = setTimeout(resetUser, timeoutDuration);
         }
 
@@ -292,10 +292,11 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                     <h2 className="text-2xl font-bold mb-2">You are checked into station: {currentStation?.name}.</h2>
                     <p className="text-gray-600 mb-6">What would you like to do?</p>
                     <div className="space-y-4">
-                        <button onClick={handleStationCheckout} className="w-full p-4 bg-yellow-500 text-white rounded-lg font-semibold hover:bg-yellow-600 flex items-center justify-center">
+                        {/* **REVISED: Applying branding colors** */}
+                        <button onClick={handleStationCheckout} className="w-full p-4 bg-accent text-white rounded-lg font-semibold hover:bg-accent-hover flex items-center justify-center">
                             <LogOut className="mr-2 h-5 w-5" /> Check Out of Station
                         </button>
-                        <button onClick={handleClassCheckout} className="w-full p-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 flex items-center justify-center">
+                        <button onClick={handleClassCheckout} className="w-full p-4 bg-accent text-white rounded-lg font-semibold hover:bg-accent-hover flex items-center justify-center">
                             <LogOut className="mr-2 h-5 w-5" /> Check Out of Class
                         </button>
                     </div>
@@ -322,7 +323,8 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                     ) : (
                         <p className="mb-6">There are no stations available for this class.</p>
                     )}
-                    <button onClick={handleClassCheckout} className="w-full mt-4 p-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 flex items-center justify-center">
+                    {/* **REVISED: Applying branding colors** */}
+                    <button onClick={handleClassCheckout} className="w-full mt-4 p-4 bg-accent text-white rounded-lg font-semibold hover:bg-accent-hover flex items-center justify-center">
                         <LogOut className="mr-2 h-5 w-5" /> Check Out of Class
                     </button>
                     {logoutButton}
