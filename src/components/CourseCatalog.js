@@ -8,18 +8,14 @@ const CourseCatalog = ({ currentUser, classes }) => {
 
     const visibleClasses = useMemo(() => {
         return classes.filter(cls => {
-            // Rule 1: Class must not be completed
             if (cls.isCompleted === true) {
                 return false;
             }
 
-            // Rule 2: If visibleToRoles is empty or not an array, it's public
             if (!Array.isArray(cls.visibleToRoles) || cls.visibleToRoles.length === 0) {
                 return true;
             }
 
-            // Rule 3: Check if the user has at least one of the required roles
-            // Ensure currentUser.roles is an array before calling .some()
             return Array.isArray(currentUser.roles) && currentUser.roles.some(userRole => cls.visibleToRoles.includes(userRole));
         });
     }, [classes, currentUser]);

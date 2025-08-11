@@ -27,12 +27,12 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
         onChange(newSelected);
     };
 
-    const selectedNames = selected.length > 0 ? selected.join(', ') : placeholder;
+    const selectedNames = selected.join(', ');
 
     return (
         <div className="relative" ref={dropdownRef}>
             <button type="button" onClick={() => setIsOpen(!isOpen)} className="w-full bg-white border border-gray-300 rounded-md shadow-sm pl-3 pr-10 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                <span className="block truncate">{selectedNames}</span>
+                <span className="block truncate">{selectedNames || placeholder}</span>
                 <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
                     <ChevronLeft className="h-5 w-5 text-gray-400 transform rotate-[-90deg]" />
                 </span>

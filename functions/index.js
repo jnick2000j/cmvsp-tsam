@@ -95,11 +95,19 @@ exports.selfEnroll = onCall(async (request) => {
     try {
         const [classDoc, studentDoc] = await Promise.all([classRef.get(), studentRef.get()]);
         
+        if (!classDoc.exists) {
+            throw new HttpsError('not-found', 'The specified class could not be found.');
+        }
+
         const classData = classDoc.data();
         const studentData = studentDoc.data();
 
-        if (!classDoc.exists || classData.isCompleted || classData.isClosedForEnrollment) {
-            throw new HttpsError('not-found', 'This class is not available for enrollment.');
+        // **FIX: Provide specific error messages for each condition.**
+        if (classData.isCompleted) {
+            throw new HttpsError('failed-precondition', 'This class has been completed and is no longer available for enrollment.');
+        }
+        if (classData.isClosedForEnrollment) {
+            throw new HttpsError('failed-precondition', 'Enrollment is currently closed for this class.');
         }
         if (!studentDoc.exists) {
             throw new HttpsError('not-found', 'Could not find your user profile.');
