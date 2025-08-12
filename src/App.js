@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot, query, updateDoc, addDoc, getDocs, where, serverTimestamp, arrayRemove, arrayUnion, runTransaction } from 'firebase/firestore';
-import { auth, db } from './firebaseConfig';
+import { auth, db, functions } from './firebaseConfig';
+import { httpsCallable } from 'firebase/functions';
 import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROL_LEADER_ROLES, PATROL_ADMIN_ROLES, appId } from './constants';
 
 // Import All Components
@@ -33,6 +34,7 @@ export default function App() {
     const [isAuthLoading, setIsAuthLoading] = useState(true);
     const [branding, setBranding] = useState({
         siteLogo: null,
+        brandIconUrl: null,
         logos: [],
         mainTitle: 'Training & Scheduling Attendance Management',
         loginTitle: 'Welcome',
@@ -51,7 +53,7 @@ export default function App() {
     const [shifts, setShifts] = useState([]);
     const [timeClockEntries, setTimeClockEntries] = useState([]);
     const [timeClocks, setTimeClocks] = useState([]);
-    const [enrollmentRequests, setEnrollmentRequests] = useState([]); // New state for approvals
+    const [enrollmentRequests, setEnrollmentRequests] = useState([]);
     const [loginMessage, setLoginMessage] = useState('');
     const [view, setView] = useState('dashboard');
     const [subView, setSubView] = useState('');
@@ -119,11 +121,14 @@ export default function App() {
             shifts: setShifts,
             timeClockEntries: setTimeClockEntries,
             timeclocks: setTimeClocks,
-            enrollmentRequests: setEnrollmentRequests // Fetch enrollment requests
+            enrollmentRequests: setEnrollmentRequests
         };
 
         const unsubscribers = Object.entries(collectionsToWatch).map(([name, setter]) => {
-            const path = name === 'users' ? name : `artifacts/${appId}/public/data/${name}`;
+            const path = name === 'users'
+                ? name
+                : `artifacts/${appId}/public/data/${name}`;
+
             const q = query(collection(db, path));
             
             return onSnapshot(q, (snapshot) => {
@@ -249,14 +254,15 @@ export default function App() {
 
     const handleEnroll = async (classId) => {
         if (!user) return;
-        const userRef = doc(db, "users", user.uid);
+        setEnrollmentError(null);
+        
+        const enrollInCourseFn = httpsCallable(functions, 'enrollInCourse');
         try {
-            await updateDoc(userRef, {
-                enrolledClasses: arrayUnion(classId)
-            });
+            const result = await enrollInCourseFn({ classId });
+            alert(result.data.message || 'Request submitted!');
         } catch (error) {
             console.error("Error enrolling in class: ", error);
-            setEnrollmentError("Failed to enroll in the class. Please try again.");
+            setEnrollmentError(error.message || "Failed to enroll. Please try again.");
         }
     };
 
@@ -435,11 +441,12 @@ export default function App() {
                     handleClassCheckIn, 
                     handleClassCheckOut,
                     handleShiftCheckIn,
-                    handleShiftCheckOut
+                    handleShiftCheckOut,
+                    brandIconUrl: branding.brandIconUrl
                 }} />;
             
             case 'catalog': 
-                return <CourseCatalog currentUser={user} classes={classes} />;
+                return <CourseCatalog currentUser={user} classes={classes} handleEnroll={handleEnroll} />;
 
             case 'profile': return <ProfileManagement {...{ user, setConfirmAction }} />;
             

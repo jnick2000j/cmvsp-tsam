@@ -86,7 +86,10 @@ exports.enrollInCourse = onCall(async (request) => {
     
     const classRef = db.doc(`artifacts/${appId}/public/data/classes/${classId}`);
     const studentRef = db.doc(`users/${uid}`);
-    const requestRef = db.collection('enrollmentRequests').doc(`${classId}_${uid}`);
+    
+    // --- FIX ---
+    // The path now correctly points to the nested collection.
+    const requestRef = db.collection(`artifacts/${appId}/public/data/enrollmentRequests`).doc(`${classId}_${uid}`);
 
     try {
         const [classDoc, studentDoc, requestDoc] = await Promise.all([classRef.get(), studentRef.get(), requestRef.get()]);
@@ -98,13 +101,12 @@ exports.enrollInCourse = onCall(async (request) => {
         const classData = classDoc.data();
         if (classData.isClosedForEnrollment) throw new HttpsError('failed-precondition', 'Enrollment is currently closed for this class.');
 
-        // NEW: Check if waivers are required for this class
         const requiredWaivers = classData.requiredWaiverIds || [];
         const status = requiredWaivers.length > 0 ? 'pending_waivers' : 'pending_approval';
 
         const studentData = studentDoc.data();
         await requestRef.set({
-            status: status, // Set status based on waiver requirement
+            status: status,
             requestDate: FieldValue.serverTimestamp(),
             userId: uid,
             classId: classId,
@@ -136,17 +138,17 @@ exports.approveEnrollment = onCall(async (request) => {
     if (!requestId) throw new HttpsError('invalid-argument', 'A "requestId" is required.');
 
     const db = getFirestore();
-    const requestRef = db.collection('enrollmentRequests').doc(requestId);
+    const appId = appIdentifier.value();
+    const requestRef = db.doc(`artifacts/${appId}/public/data/enrollmentRequests/${requestId}`);
     const requestDoc = await requestRef.get();
 
     if (!requestDoc.exists) throw new HttpsError('not-found', 'The enrollment request was not found.');
     
     const { userId, classId } = requestDoc.data();
-    const classRef = db.doc(`artifacts/${appIdentifier.value()}/public/data/classes/${classId}`);
+    const classRef = db.doc(`artifacts/${appId}/public/data/classes/${classId}`);
     const classSnap = await classRef.get();
     const requiredWaivers = classSnap.data().requiredWaiverIds || [];
 
-    // NEW: Verify all required waivers are signed and approved
     if (requiredWaivers.length > 0) {
         const signedWaiversQuery = await db.collection('signedWaivers')
             .where('userId', '==', userId)
@@ -181,7 +183,8 @@ exports.denyEnrollment = onCall(async (request) => {
     if (!requestId) throw new HttpsError('invalid-argument', 'A "requestId" is required.');
 
     const db = getFirestore();
-    const requestRef = db.collection('enrollmentRequests').doc(requestId);
+    const appId = appIdentifier.value();
+    const requestRef = db.doc(`artifacts/${appId}/public/data/enrollmentRequests/${requestId}`);
     await requestRef.update({ status: 'denied', deniedBy: denierId, deniedAt: FieldValue.serverTimestamp() });
     
     console.log(`TODO: Send denial email regarding request ${requestId}.`);
