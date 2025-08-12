@@ -1,152 +1,94 @@
-import React, { useState, useEffect } from 'react';
-import { db } from '../firebaseConfig';
-import { collection, onSnapshot, addDoc, query, where, getDocs, doc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { ENROLLMENTS, CLASSES, USERS, WAIVERS } from '../constants';
-import WaiverSigningModal from './WaiverSigningModal';
+// src/components/CourseCatalog.js
+import React, { useState, useMemo } from 'react';
+import { Calendar, MapPin, Hourglass, Search } from 'lucide-react';
 
-const CourseCatalog = ({ user }) => {
-    const [courses, setCourses] = useState([]);
-    const [users, setUsers] = useState([]);
-    const [enrollments, setEnrollments] = useState([]);
-    const [isWaiverModalOpen, setIsWaiverModalOpen] = useState(false);
-    const [classToEnroll, setClassToEnroll] = useState(null);
-    const [requiredWaivers, setRequiredWaivers] = useState([]);
+const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError, logoUrl }) => {
+    const [searchTerm, setSearchTerm] = useState('');
 
-    useEffect(() => {
-        const unsubscribeCourses = onSnapshot(collection(db, CLASSES), snapshot => {
-            const coursesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setCourses(coursesData);
-        });
-
-        const unsubscribeUsers = onSnapshot(collection(db, USERS), snapshot => {
-            const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setUsers(usersData);
-        });
-
-        const unsubscribeEnrollments = onSnapshot(collection(db, ENROLLMENTS), snapshot => {
-            const enrollmentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setEnrollments(enrollmentsData);
-        });
-
-        return () => {
-            unsubscribeCourses();
-            unsubscribeUsers();
-            unsubscribeEnrollments();
-        };
-    }, []);
-
-    const getUserName = (uid) => users.find(user => user.id === uid)?.name || 'Unknown';
-
-    const requestEnrollment = async (classItem) => {
-        try {
-            await addDoc(collection(db, ENROLLMENTS), {
-                classId: classItem.id,
-                className: classItem.name,
-                userId: user.uid,
-                userName: user.displayName,
-                status: 'pending',
-                requestedAt: serverTimestamp(),
-            });
-            alert('Enrollment request sent!');
-        } catch (error) {
-            console.error("Error sending enrollment request: ", error);
-            alert('Failed to send enrollment request.');
-        }
+    const getLeadInstructorName = (instructorId) => {
+        const instructor = allUsers.find(u => u.id === instructorId);
+        return instructor ? `${instructor.firstName} ${instructor.lastName}` : 'N/A';
     };
 
-    const handleEnrollClick = async (classItem) => {
-        if (classItem.waiverIds && classItem.waiverIds.length > 0) {
-            const signedWaiversCollection = collection(db, `users/${user.uid}/signedWaivers`);
-            const q = query(signedWaiversCollection, where('classId', '==', classItem.id));
-            const signedWaiversSnapshot = await getDocs(q);
-            const userSignedWaiverIds = signedWaiversSnapshot.docs.map(d => d.data().waiverId);
-
-            const waiversToSign = [];
-            for (const waiverId of classItem.waiverIds) {
-                if (!userSignedWaiverIds.includes(waiverId)) {
-                    const waiverDoc = await getDoc(doc(db, WAIVERS, waiverId));
-                    if (waiverDoc.exists()) {
-                        waiversToSign.push({ id: waiverDoc.id, ...waiverDoc.data() });
-                    }
+    const visibleClasses = useMemo(() => {
+        return classes
+            .filter(course => {
+                // Filter out hidden or completed classes
+                if (course.isHidden || course.isCompleted) {
+                    return false;
                 }
-            }
-
-            if (waiversToSign.length > 0) {
-                setClassToEnroll(classItem);
-                setRequiredWaivers(waiversToSign);
-                setIsWaiverModalOpen(true);
-            } else {
-                requestEnrollment(classItem);
-            }
-        } else {
-            requestEnrollment(classItem);
-        }
-    };
-
-    const handleWaiversSigned = () => {
-        requestEnrollment(classToEnroll);
-        setIsWaiverModalOpen(false);
-        setClassToEnroll(null);
-        setRequiredWaivers([]);
-    };
-
-    const getEnrollmentStatus = (classId) => {
-        const enrollment = enrollments.find(e => e.classId === classId && e.userId === user.uid);
-        if (enrollment) {
-            return {
-                status: enrollment.status,
-                text: `Status: ${enrollment.status.charAt(0).toUpperCase() + enrollment.status.slice(1)}`
-            };
-        }
-        const course = courses.find(c => c.id === classId);
-        if(course) {
-            const enrolledCount = enrollments.filter(e => e.classId === classId && e.status === 'approved').length;
-            if (enrolledCount >= course.slots) {
-                return { status: 'full', text: 'Class Full' };
-            }
-        }
-        return null;
-    };
+                // Filter by role visibility
+                if (course.visibleToRoles && course.visibleToRoles.length > 0) {
+                    return course.visibleToRoles.includes(user.role);
+                }
+                return true; // Show if no roles are specified
+            })
+            .filter(course => 
+                course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (getLeadInstructorName(course.leadInstructorId) || '').toLowerCase().includes(searchTerm.toLowerCase())
+            );
+    }, [classes, searchTerm, user, allUsers, getLeadInstructorName]);
 
     return (
-        <div className="container mx-auto p-4">
-            <h2 className="text-2xl font-bold mb-4">Course Catalog</h2>
+        <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+            <div className="sm:flex sm:items-center sm:justify-between">
+                <div className="flex items-center space-x-4">
+                    {logoUrl && <img src={logoUrl} alt="Catalog Logo" className="h-12" />}
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-900">Course Catalog</h2>
+                        <p className="mt-1 text-sm text-gray-500">Browse and enroll in available courses.</p>
+                    </div>
+                </div>
+                <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                        <input
+                            type="text"
+                            placeholder="Search courses..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border rounded-md"
+                        />
+                    </div>
+                </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {courses.map(course => {
-                    const enrollmentStatus = getEnrollmentStatus(course.id);
-                    const isButtonDisabled = enrollmentStatus?.status === 'pending' || enrollmentStatus?.status === 'approved' || enrollmentStatus?.status === 'full';
-                    const buttonText = enrollmentStatus ? enrollmentStatus.text : 'Request to Enroll';
-
+                {visibleClasses.map(course => {
+                    const isEnrolled = user.enrolledClasses?.includes(course.id);
+                    const isPast = new Date(course.endDate) < new Date();
                     return (
-                        <div key={course.id} className="bg-white rounded-lg shadow-lg p-6 flex flex-col justify-between">
-                            <div>
-                                <h3 className="text-xl font-bold mb-2">{course.name}</h3>
-                                <p className="text-gray-600 mb-1"><strong>Instructor:</strong> {getUserName(course.instructor)}</p>
-                                <p className="text-gray-600 mb-1"><strong>Date:</strong> {course.date}</p>
-                                <p className="text-gray-600 mb-1"><strong>Time:</strong> {course.startTime} - {course.endTime}</p>
-                                <p className="text-gray-600 mb-1"><strong>Location:</strong> {course.location}</p>
-                                <p className="text-gray-600 mb-4"><strong>Description:</strong> {course.description}</p>
+                        <div key={course.id} className={`bg-white rounded-xl shadow-lg overflow-hidden flex flex-col ${isPast ? 'opacity-60' : ''}`}>
+                            <div className="p-5 border-b">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h3 className="text-lg font-bold text-gray-800">{course.name}</h3>
+                                        <p className="text-sm text-gray-500">Lead Instructor: {getLeadInstructorName(course.leadInstructorId)}</p>
+                                    </div>
+                                    {isPast && <span className="text-xs font-semibold bg-gray-200 text-gray-700 px-2 py-1 rounded-full">CLOSED</span>}
+                                </div>
                             </div>
-                            <button
-                                onClick={() => handleEnrollClick(course)}
-                                className={`w-full py-2 px-4 rounded font-bold text-white transition-colors ${isButtonDisabled ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-700'}`}
-                                disabled={isButtonDisabled}
-                            >
-                                {buttonText}
-                            </button>
+                            <div className="p-5 flex-grow space-y-3 text-sm">
+                                {course.summary && <p className="text-gray-600">{course.summary}</p>}
+                                <div className="flex items-center text-gray-500"><Calendar className="h-4 w-4 mr-2" /><span>{course.startDate} to {course.endDate}</span></div>
+                                <div className="flex items-center text-gray-500"><MapPin className="h-4 w-4 mr-2" /><span>{course.location}</span></div>
+                                <div className="flex items-center text-gray-500"><Hourglass className="h-4 w-4 mr-2" /><span>{course.hours} hours</span></div>
+                            </div>
+                            <div className="p-4 bg-gray-50 border-t">
+                                <button
+                                    onClick={() => onEnrollClick(course.id)}
+                                    disabled={isEnrolled || isPast}
+                                    className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-green-600 disabled:cursor-not-allowed"
+                                >
+                                    {isEnrolled ? 'Enrolled' : isPast ? 'Closed' : 'Enroll Now'}
+                                </button>
+                                {enrollmentError && enrollmentError.classId === course.id && (
+                                    <p className="text-xs text-red-600 mt-2 text-center">{enrollmentError.message}</p>
+                                )}
+                            </div>
                         </div>
                     );
                 })}
             </div>
-            {isWaiverModalOpen && (
-                <WaiverSigningModal
-                    user={user}
-                    classToEnroll={classToEnroll}
-                    waivers={requiredWaivers}
-                    onClose={() => setIsWaiverModalOpen(false)}
-                    onSigned={handleWaiversSigned}
-                />
-            )}
         </div>
     );
 };

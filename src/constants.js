@@ -1,18 +1,9 @@
-/* global __app_id */
 // src/constants.js
-
-// Firestore collection names
-export const USERS = 'users';
-export const CLASSES = 'classes';
-export const ENROLLMENTS = 'enrollments';
-export const SHIFTS = 'shifts';
-export const TIMECLOCK = 'timeClock';
-export const WAIVERS = 'waivers';
-
-// Role and scheduling constants
 export const INSTRUCTOR_ROLES = ['Lead Instructor', 'Assisting Instructor', 'OEC Instructor in Training', 'Instructor Trainer', 'Instructor of Record'];
 export const SUPPORT_ROLES = ['Aid Room Patroller', 'Alpine Patroller', 'Professional Patroller', 'Safety Patroller', 'OEC Safety Patroller', 'Mountain Host', 'Other'];
-export const PATROL_ADMIN_ROLES = ['Patrol Shift Leader', 'Assistant Patrol Shift Leader', 'Patrol Leadership'];
+export const appId = 'training-attendance-app';
+
+// Scheduling Module Constants
 export const PATROL_LEADER_ROLES = ['Patrol Shift Leader', 'Assistant Patrol Shift Leader', 'Patrol Leadership'];
 export const PATROL_ROLES = [
     'Paramedic/Advanced Provider',
@@ -51,7 +42,7 @@ export const MOUNTAIN_AREAS = [
 ];
 export const SHIFT_TYPES = ['Full Day', 'AM Half Day (Night Chair)', 'PM Half Day (Night Chair)', 'Night Chair'];
 
-// List of NSP Patrols and Agencies
+// New list of NSP Patrols and Agencies
 export const NSP_PATROLS = [
     "Crystal Mountain - Pro Patrol",
     "Crystal Mountain - Volunteer Patrol",
@@ -92,6 +83,3 @@ export const NSP_PATROLS = [
     "Willamette Backcountry",
     "Willamette Pass"
 ];
-
-// App ID - using the dynamic version for compatibility with the environment
-export const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';

@@ -1,18 +1,19 @@
 // src/components/AdminPortal.js
 import React, { useState, useMemo, useEffect } from 'react';
-import { doc, deleteDoc, query, collection, getDocs, where, addDoc, onSnapshot } from 'firebase/firestore';
+import { doc, deleteDoc, updateDoc, query, where, getDocs, collection, addDoc, setDoc, onSnapshot, orderBy } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { INSTRUCTOR_ROLES, appId } from '../constants';
 import UserEditModal from './UserEditModal';
 import StationEditModal from './StationEditModal';
 import ClassEditModal from './ClassEditModal';
-import TimeClockManagement from './TimeClockManagement';
 import WaiverManagement from './WaiverManagement';
-import { Search, Edit, Trash2, Layers, BookOpen, UserCog, Mail, Smartphone, UserCheck, PlusCircle, Copy, FileText } from 'lucide-react';
+// import ShiftManagement from './ShiftManagement'; // REMOVED
+import TimeClockManagement from './TimeClockManagement';
+import { Search, Edit, Trash2, Layers, BookOpen, UserCog, FileSignature, Mail, Smartphone, UserCheck, PlusCircle, Copy } from 'lucide-react';
 import Icon from './Icon';
 
-const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmAction, onApproveUser, branding }) => {
+const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser, branding }) => {
     const [adminView, setAdminView] = useState('users');
     const [searchTerm, setSearchTerm] = useState('');
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -21,20 +22,27 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
     const [editingUser, setEditingUser] = useState(null);
     const [editingStation, setEditingStation] = useState(null);
     const [editingClass, setEditingClass] = useState(null);
+    // const [shifts, setShifts] = useState([]); // REMOVED
     const [timeClocks, setTimeClocks] = useState([]);
 
     useEffect(() => {
+        // const shiftsQuery = query(collection(db, `artifacts/${appId}/public/data/shifts`), orderBy("date", "desc")); // REMOVED
+        // const unsubscribeShifts = onSnapshot(shiftsQuery, (snapshot) => { // REMOVED
+        //     setShifts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); // REMOVED
+        // }); // REMOVED
+
         const timeClocksQuery = query(collection(db, `artifacts/${appId}/public/data/timeclocks`));
         const unsubscribeTimeClocks = onSnapshot(timeClocksQuery, (snapshot) => {
             setTimeClocks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
 
         return () => {
+            // unsubscribeShifts(); // REMOVED
             unsubscribeTimeClocks();
         };
     }, []);
 
-    const instructors = useMemo(() => allUsers.filter(u => INSTRUCTOR_ROLES.some(role => u.roles?.includes(role)) || u.isAdmin), [allUsers]);
+    const instructors = useMemo(() => allUsers.filter(u => INSTRUCTOR_ROLES.includes(u.role) || u.isAdmin), [allUsers]);
 
     const handlePasswordReset = (email, name) => {
         setConfirmAction({
@@ -50,6 +58,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
         });
     };
 
+    // ... (other handlers remain the same) ...
     const handleCopyClass = async (classToCopy) => {
         try {
             const newClassData = { ...classToCopy, name: `${classToCopy.name} (Copy)` };
@@ -150,26 +159,28 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
         }
     };
 
+
     const filteredUsers = allUsers.filter(user => `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) || user.email.toLowerCase().includes(searchTerm.toLowerCase()) || (user.role && user.role.toLowerCase().includes(searchTerm.toLowerCase())) || (user.ability && user.ability.toLowerCase().includes(searchTerm.toLowerCase())));
 
     return (
         <>
             <UserEditModal isOpen={isUserModalOpen} onClose={handleCloseUserModal} userToEdit={editingUser} onSave={() => {}} />
             <StationEditModal isOpen={isStationModalOpen} onClose={handleCloseStationModal} stationToEdit={editingStation} onSave={() => {}} classes={classes} allUsers={allUsers} />
-            <ClassEditModal isOpen={isClassModalOpen} onClose={handleCloseClassModal} classToEdit={editingClass} onSave={() => {}} instructors={instructors} allUsers={allUsers} currentUser={currentUser} branding={branding} />
+            <ClassEditModal isOpen={isClassModalOpen} onClose={handleCloseClassModal} classToEdit={editingClass} onSave={() => {}} instructors={instructors} allUsers={allUsers} currentUser={currentUser} waivers={waivers} branding={branding} />
 
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="border-b border-gray-200 mb-6">
-                    <nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
+                    <nav className="-mb-px flex space-x-8" aria-label="Tabs">
                         <button onClick={() => setAdminView('classes')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'classes' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Layers className="mr-2" size={18}/> Class Management</button>
                         <button onClick={() => setAdminView('stations')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'stations' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><BookOpen className="mr-2" size={18}/> Station Management</button>
                         <button onClick={() => setAdminView('users')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'users' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserCog className="mr-2" size={18}/> User Management</button>
+                        {/* <button onClick={() => setAdminView('shifts')} ... /> REMOVED */}
                         <button onClick={() => setAdminView('timeclocks')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'timeclocks' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Smartphone className="mr-2" size={18}/> Time Clock Devices</button>
-                        <button onClick={() => setAdminView('waivers')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'waivers' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><FileText className="mr-2" size={18}/> Waiver Management</button>
+                        <button onClick={() => setAdminView('waivers')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'waivers' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><FileSignature className="mr-2" size={18}/> Waiver Management</button>
                     </nav>
                 </div>
 
-                {adminView === 'users' && (
+                 {adminView === 'users' && (
                     <>
                         <div className="sm:flex sm:items-center sm:justify-between">
                             <div>
@@ -251,8 +262,9 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         </div>
                     </>
                 )}
+                {/* {adminView === 'shifts' && <ShiftManagement shifts={shifts} users={allUsers} onSave={handleSaveShift} onDelete={handleDeleteShift} />} REMOVED */}
                 {adminView === 'timeclocks' && <TimeClockManagement timeClocks={timeClocks} onSave={handleSaveTimeClock} onDelete={handleDeleteTimeClock} />}
-                {adminView === 'waivers' && <WaiverManagement />}
+                {adminView === 'waivers' && <WaiverManagement waivers={waivers} setConfirmAction={setConfirmAction} />}
             </div>
         </>
     );
