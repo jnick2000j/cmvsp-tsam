@@ -1,6 +1,6 @@
 // src/components/AdminPortal.js
 import React, { useState, useMemo, useEffect } from 'react';
-import { doc, deleteDoc, updateDoc, query, where, getDocs, collection, addDoc, setDoc, onSnapshot, orderBy } from 'firebase/firestore';
+import { doc, deleteDoc, query, collection, getDocs, where, addDoc } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { INSTRUCTOR_ROLES, appId } from '../constants';
@@ -8,8 +8,8 @@ import UserEditModal from './UserEditModal';
 import StationEditModal from './StationEditModal';
 import ClassEditModal from './ClassEditModal';
 import TimeClockManagement from './TimeClockManagement';
-import WaiverTemplateCreator from './WaiverTemplateCreator'; // Import the new component for waivers
-import { Search, Edit, Trash2, Layers, BookOpen, UserCog, Mail, Smartphone, UserCheck, PlusCircle, Copy, FileText } from 'lucide-react'; // Added FileText icon
+import WaiverManagement from './WaiverManagement'; // Replaced WaiverTemplateCreator
+import { Search, Edit, Trash2, Layers, BookOpen, UserCog, Mail, Smartphone, UserCheck, PlusCircle, Copy, FileText } from 'lucide-react';
 import Icon from './Icon';
 
 const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmAction, onApproveUser, branding }) => {
@@ -21,21 +21,8 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
     const [editingUser, setEditingUser] = useState(null);
     const [editingStation, setEditingStation] = useState(null);
     const [editingClass, setEditingClass] = useState(null);
-    const [timeClocks, setTimeClocks] = useState([]);
-
-    useEffect(() => {
-        const timeClocksQuery = query(collection(db, `artifacts/${appId}/public/data/timeclocks`));
-        const unsubscribeTimeClocks = onSnapshot(timeClocksQuery, (snapshot) => {
-            setTimeClocks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        });
-
-        return () => {
-            unsubscribeTimeClocks();
-        };
-    }, []);
-
+    
     const instructors = useMemo(() => allUsers.filter(u => INSTRUCTOR_ROLES.some(role => u.roles?.includes(role)) || u.isAdmin), [allUsers]);
-
 
     const handlePasswordReset = (email, name) => {
         setConfirmAction({
@@ -135,22 +122,6 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
         });
     };
 
-    const handleSaveTimeClock = async (timeClockData) => {
-        try {
-            await addDoc(collection(db, `artifacts/${appId}/public/data/timeclocks`), timeClockData);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    const handleDeleteTimeClock = async (timeClockId) => {
-        try {
-            await deleteDoc(doc(db, `artifacts/${appId}/public/data/timeclocks`, timeClockId));
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
     const filteredUsers = allUsers.filter(user => `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) || user.email.toLowerCase().includes(searchTerm.toLowerCase()) || (user.role && user.role.toLowerCase().includes(searchTerm.toLowerCase())) || (user.ability && user.ability.toLowerCase().includes(searchTerm.toLowerCase())));
 
     return (
@@ -161,13 +132,12 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
 
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="border-b border-gray-200 mb-6">
-                    <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                    <nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
                         <button onClick={() => setAdminView('classes')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'classes' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Layers className="mr-2" size={18}/> Class Management</button>
                         <button onClick={() => setAdminView('stations')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'stations' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><BookOpen className="mr-2" size={18}/> Station Management</button>
                         <button onClick={() => setAdminView('users')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'users' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserCog className="mr-2" size={18}/> User Management</button>
                         <button onClick={() => setAdminView('timeclocks')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'timeclocks' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Smartphone className="mr-2" size={18}/> Time Clock Devices</button>
-                        {/* NEW: Waivers tab added */}
-                        <button onClick={() => setAdminView('waivers')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'waivers' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><FileText className="mr-2" size={18}/> Waiver Templates</button>
+                        <button onClick={() => setAdminView('waivers')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'waivers' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><FileText className="mr-2" size={18}/> Waiver Management</button>
                     </nav>
                 </div>
 
@@ -253,21 +223,8 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         </div>
                     </>
                 )}
-                {adminView === 'timeclocks' && <TimeClockManagement timeClocks={timeClocks} onSave={handleSaveTimeClock} onDelete={handleDeleteTimeClock} />}
-                {/* NEW: Conditionally render the WaiverTemplateCreator */}
-                {adminView === 'waivers' && (
-                    <>
-                        <div className="sm:flex sm:items-center sm:justify-between">
-                            <div>
-                                <h2 className="text-2xl font-bold text-gray-900">Waiver Templates</h2>
-                                <p className="mt-1 text-sm text-gray-500">Create and manage waiver templates that can be assigned to classes.</p>
-                            </div>
-                        </div>
-                        <div className="mt-6">
-                            <WaiverTemplateCreator />
-                        </div>
-                    </>
-                )}
+                {adminView === 'timeclocks' && <TimeClockManagement users={allUsers} />}
+                {adminView === 'waivers' && <WaiverManagement />}
             </div>
         </>
     );

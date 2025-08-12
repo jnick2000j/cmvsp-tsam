@@ -1,9 +1,8 @@
 // src/components/ClassEditModal.js
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { doc, updateDoc, addDoc, collection, arrayRemove, getDocs, deleteDoc } from 'firebase/firestore';
-import { db, functions } from '../firebaseConfig';
-import { httpsCallable } from 'firebase/functions';
-import { appId, INSTRUCTOR_ROLES, SUPPORT_ROLES } from '../constants';
+import { db } from '../firebaseConfig';
+import { appId, INSTRUCTOR_ROLES, SUPPORT_ROLES, WAIVERS } from '../constants';
 import { PlusCircle, Trash2, ChevronLeft, Check } from 'lucide-react';
 
 const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
@@ -56,30 +55,30 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
 };
 
 
-const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser, branding }) => {
+const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser }) => {
     const [formData, setFormData] = useState({});
     const [numGroups, setNumGroups] = useState(1);
     const [enrolledStudentsList, setEnrolledStudentsList] = useState([]);
-    const [selectedStudent, setSelectedStudent] = useState('');
-    const [isEnrolling, setIsEnrolling] = useState(false);
+    const [allWaivers, setAllWaivers] = useState([]);
 
     const allTrainingRoles = useMemo(() => ['Student', ...INSTRUCTOR_ROLES, ...SUPPORT_ROLES], []);
 
     const getInitialFormData = useCallback(() => ({
-        name: '', 
-        startDate: '', 
-        endDate: '', 
-        hours: '', 
-        location: '', 
-        summary: '', 
-        leadInstructorId: currentUser?.uid || '', 
-        supportNeeds: [], 
-        studentGroups: {}, 
-        isPrerequisiteUploadRequired: false, 
-        visibleToRoles: [], 
-        logoUrl: '', 
+        name: '',
+        startDate: '',
+        endDate: '',
+        hours: '',
+        location: '',
+        summary: '',
+        leadInstructorId: currentUser?.uid || '',
+        supportNeeds: [],
+        studentGroups: {},
+        isPrerequisiteUploadRequired: false,
+        visibleToRoles: [],
+        logoUrl: '',
         isCompleted: false,
         isClosedForEnrollment: false,
+        waiverIds: [], // Added for waiver functionality
     }), [currentUser]);
 
     const fetchEnrolledStudents = useCallback(async (classId) => {
@@ -95,13 +94,31 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
             setEnrolledStudentsList([]);
         }
     }, [allUsers]);
+    
+    // Fetch waivers when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            const fetchWaivers = async () => {
+                try {
+                    const waiversCollection = collection(db, WAIVERS);
+                    const waiverSnapshot = await getDocs(waiversCollection);
+                    const waiverList = waiverSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setAllWaivers(waiverList);
+                } catch (error) {
+                    console.error("Error fetching waivers: ", error);
+                }
+            };
+            fetchWaivers();
+        }
+    }, [isOpen]);
 
     useEffect(() => {
         if (isOpen) {
             if (classToEdit) {
                 const data = {
-                    ...getInitialFormData(), 
+                    ...getInitialFormData(),
                     ...classToEdit,
+                    waiverIds: classToEdit.waiverIds || [], // Ensure waiverIds is initialized
                 };
                 setFormData(data);
                 const maxGroup = Object.values(data.studentGroups || {}).reduce((max, num) => Math.max(max, num), 1);
@@ -124,6 +141,15 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
     
     const handleRoleVisibilityChange = (selectedRoles) => {
         setFormData({ ...formData, visibleToRoles: selectedRoles });
+    };
+
+    const handleWaiverChange = (waiverId) => {
+        setFormData(prev => {
+            const newWaiverIds = prev.waiverIds.includes(waiverId)
+                ? prev.waiverIds.filter(id => id !== waiverId)
+                : [...prev.waiverIds, waiverId];
+            return { ...prev, waiverIds: newWaiverIds };
+        });
     };
 
     const handleSupportChange = (index, field, value) => {
@@ -221,6 +247,28 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                             placeholder="All Roles (Public)"
                         />
                         <p className="text-xs text-gray-500 mt-1">If no roles are selected, the class will be visible to everyone.</p>
+                    </div>
+
+                    {/* MERGED: Waiver Selection Section */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Required Waivers</label>
+                        <div className="mt-2 space-y-2 max-h-32 overflow-y-auto border p-2 rounded-md">
+                            {allWaivers.length > 0 ? allWaivers.map(waiver => (
+                                <div key={waiver.id} className="flex items-center">
+                                    <input
+                                        id={`waiver-${waiver.id}`}
+                                        name="waivers"
+                                        type="checkbox"
+                                        checked={(formData.waiverIds || []).includes(waiver.id)}
+                                        onChange={() => handleWaiverChange(waiver.id)}
+                                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                    />
+                                    <label htmlFor={`waiver-${waiver.id}`} className="ml-3 block text-sm font-medium text-gray-700">
+                                        {waiver.title}
+                                    </label>
+                                </div>
+                            )) : <p className="text-sm text-gray-500">No waivers available to attach.</p>}
+                        </div>
                     </div>
 
                     <div className="space-y-2 border-t pt-4 mt-4">
@@ -335,8 +383,8 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                             ))}
                          </div>
                          <button type="button" onClick={addSupportNeed} className="mt-3 flex items-center px-3 py-2 text-sm bg-green-100 text-green-800 rounded-md hover:bg-green-200">
-                            <PlusCircle size={16} className="mr-2" />
-                            Add Support Need
+                             <PlusCircle size={16} className="mr-2" />
+                             Add Support Need
                          </button>
                     </div>
                 </div>
