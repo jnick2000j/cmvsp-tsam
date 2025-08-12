@@ -71,7 +71,7 @@ exports.createUserAccount = onCall(async (request) => {
 });
 
 /**
- * Creates a pending enrollment request and checks for required waivers.
+ * Creates a pending enrollment request.
  */
 exports.enrollInCourse = onCall(async (request) => {
     const { classId } = request.data;
@@ -87,8 +87,6 @@ exports.enrollInCourse = onCall(async (request) => {
     const classRef = db.doc(`artifacts/${appId}/public/data/classes/${classId}`);
     const studentRef = db.doc(`users/${uid}`);
     
-    // --- FIX ---
-    // The path now correctly points to the nested collection.
     const requestRef = db.collection(`artifacts/${appId}/public/data/enrollmentRequests`).doc(`${classId}_${uid}`);
 
     try {
@@ -101,12 +99,9 @@ exports.enrollInCourse = onCall(async (request) => {
         const classData = classDoc.data();
         if (classData.isClosedForEnrollment) throw new HttpsError('failed-precondition', 'Enrollment is currently closed for this class.');
 
-        const requiredWaivers = classData.requiredWaiverIds || [];
-        const status = requiredWaivers.length > 0 ? 'pending_waivers' : 'pending_approval';
-
         const studentData = studentDoc.data();
         await requestRef.set({
-            status: status,
+            status: 'pending_approval',
             requestDate: FieldValue.serverTimestamp(),
             userId: uid,
             classId: classId,
@@ -115,9 +110,7 @@ exports.enrollInCourse = onCall(async (request) => {
             leadInstructorId: classData.leadInstructorId || null 
         });
 
-        const message = status === 'pending_waivers' 
-            ? 'Enrollment request received. Please sign the required waivers to proceed.'
-            : 'Your enrollment request has been submitted for approval.';
+        const message = 'Your enrollment request has been submitted for approval.';
         return { success: true, message: message };
 
     } catch (error) {
@@ -128,7 +121,7 @@ exports.enrollInCourse = onCall(async (request) => {
 });
 
 /**
- * Approves a pending enrollment request, but only if all waivers are approved.
+ * Approves a pending enrollment request.
  */
 exports.approveEnrollment = onCall(async (request) => {
     const { requestId } = request.data;
@@ -145,22 +138,7 @@ exports.approveEnrollment = onCall(async (request) => {
     if (!requestDoc.exists) throw new HttpsError('not-found', 'The enrollment request was not found.');
     
     const { userId, classId } = requestDoc.data();
-    const classRef = db.doc(`artifacts/${appId}/public/data/classes/${classId}`);
-    const classSnap = await classRef.get();
-    const requiredWaivers = classSnap.data().requiredWaiverIds || [];
-
-    if (requiredWaivers.length > 0) {
-        const signedWaiversQuery = await db.collection('signedWaivers')
-            .where('userId', '==', userId)
-            .where('classId', '==', classId)
-            .where('status', '==', 'approved')
-            .get();
-        
-        if (signedWaiversQuery.size !== requiredWaivers.length) {
-            throw new HttpsError('failed-precondition', 'Cannot approve enrollment until all required waivers are signed and approved.');
-        }
-    }
-
+    
     const studentRef = db.doc(`users/${userId}`);
     const batch = db.batch();
     batch.update(requestRef, { status: 'approved', approvedBy: approverId, approvedAt: FieldValue.serverTimestamp() });
@@ -190,74 +168,6 @@ exports.denyEnrollment = onCall(async (request) => {
     console.log(`TODO: Send denial email regarding request ${requestId}.`);
     return { success: true, message: "Enrollment denied." };
 });
-
-/**
- * Creates a new waiver template. Admin only.
- */
-exports.createWaiverTemplate = onCall(async (request) => {
-    const { title, content } = request.data;
-    const uid = request.auth?.uid;
-    // In a real app, you'd verify the user is an admin here
-    if (!uid) throw new HttpsError('unauthenticated', 'Admin authentication required.');
-    if (!title || !content) throw new HttpsError('invalid-argument', 'Title and content are required.');
-
-    const db = getFirestore();
-    await db.collection('waiverTemplates').add({
-        title,
-        content,
-        createdAt: FieldValue.serverTimestamp(),
-        createdBy: uid,
-    });
-    return { success: true, message: 'Waiver template created successfully.' };
-});
-
-/**
- * Allows a user to electronically sign a waiver for a class.
- */
-exports.signWaiver = onCall(async (request) => {
-    const { classId, waiverTemplateId, signature } = request.data;
-    const uid = request.auth?.uid;
-
-    if (!uid) throw new HttpsError('unauthenticated', 'You must be logged in to sign a waiver.');
-    if (!classId || !waiverTemplateId || !signature) throw new HttpsError('invalid-argument', 'Class ID, Waiver ID, and signature are required.');
-
-    const db = getFirestore();
-    const waiverRef = db.collection('signedWaivers').doc(`${classId}_${uid}_${waiverTemplateId}`);
-    
-    await waiverRef.set({
-        classId,
-        waiverTemplateId,
-        userId: uid,
-        signature, // This is the user's typed name
-        status: 'pending_review',
-        signedAt: FieldValue.serverTimestamp(),
-    });
-
-    return { success: true, message: 'Waiver signed and submitted for review.' };
-});
-
-/**
- * Allows an instructor/admin to approve a signed waiver.
- */
-exports.approveWaiver = onCall(async (request) => {
-    const { signedWaiverId } = request.data;
-    const approverId = request.auth?.uid;
-
-    if (!approverId) throw new HttpsError('unauthenticated', 'Authentication required.');
-    // In a real app, verify the approver is an admin or the class instructor
-    
-    const db = getFirestore();
-    const waiverRef = db.collection('signedWaivers').doc(signedWaiverId);
-    
-    await waiverRef.update({
-        status: 'approved',
-        reviewedBy: approverId,
-        reviewedAt: FieldValue.serverTimestamp(),
-    });
-
-    return { success: true, message: 'Waiver approved.' };
-});
-
 
 /**
  * Deletes a user's account from Firebase Authentication when their corresponding
