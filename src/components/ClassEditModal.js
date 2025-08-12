@@ -55,7 +55,7 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
 };
 
 
-const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser }) => {
+const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser, branding }) => {
     const [formData, setFormData] = useState({});
     const [numGroups, setNumGroups] = useState(1);
     const [enrolledStudentsList, setEnrolledStudentsList] = useState([]);
@@ -145,9 +145,9 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
 
     const handleWaiverChange = (waiverId) => {
         setFormData(prev => {
-            const newWaiverIds = prev.waiverIds.includes(waiverId)
-                ? prev.waiverIds.filter(id => id !== waiverId)
-                : [...prev.waiverIds, waiverId];
+            const newWaiverIds = (prev.waiverIds || []).includes(waiverId)
+                ? (prev.waiverIds || []).filter(id => id !== waiverId)
+                : [...(prev.waiverIds || []), waiverId];
             return { ...prev, waiverIds: newWaiverIds };
         });
     };
