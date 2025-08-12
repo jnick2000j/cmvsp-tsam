@@ -1,3 +1,4 @@
+/* global __app_id */
 // src/constants.js
 
 // Firestore collection names
