@@ -9,8 +9,7 @@ import StationEditModal from './StationEditModal';
 import ClassEditModal from './ClassEditModal';
 import TimeClockManagement from './TimeClockManagement';
 import WaiverManagement from './WaiverManagement';
-import Branding from './Branding'; // Import the Branding component
-import { Search, Edit, Trash2, Layers, BookOpen, UserCog, Mail, Smartphone, UserCheck, PlusCircle, Copy, FileText, Palette } from 'lucide-react'; // Added Palette icon
+import { Search, Edit, Trash2, Layers, BookOpen, UserCog, Mail, Smartphone, UserCheck, PlusCircle, Copy, FileText } from 'lucide-react';
 import Icon from './Icon';
 
 const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmAction, onApproveUser, branding }) => {
@@ -167,7 +166,6 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         <button onClick={() => setAdminView('users')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'users' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserCog className="mr-2" size={18}/> User Management</button>
                         <button onClick={() => setAdminView('timeclocks')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'timeclocks' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Smartphone className="mr-2" size={18}/> Time Clock Devices</button>
                         <button onClick={() => setAdminView('waivers')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'waivers' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><FileText className="mr-2" size={18}/> Waiver Management</button>
-                        <button onClick={() => setAdminView('branding')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'branding' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Palette className="mr-2" size={18}/> Branding</button>
                     </nav>
                 </div>
 
@@ -255,7 +253,6 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                 )}
                 {adminView === 'timeclocks' && <TimeClockManagement timeClocks={timeClocks} onSave={handleSaveTimeClock} onDelete={handleDeleteTimeClock} />}
                 {adminView === 'waivers' && <WaiverManagement />}
-                {adminView === 'branding' && <Branding branding={branding} />}
             </div>
         </>
     );

@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, doc, onSnapshot, query, updateDoc, addDoc, getDocs, where, serverTimestamp, arrayRemove, arrayUnion, runTransaction } from 'firebase/firestore';
 import { auth, db, functions } from './firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
-import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROL_LEADER_ROLES, PATROL_ADMIN_ROLES, appId } from './constants';
+import { INSTRUCTOR_ROLES, SUPPORT_ROLES, PATROL_LEADER_ROLES, PATROL_ADMIN_ROLES, appId, USERS, CLASSES } from './constants';
 
 // Import All Components
 import AuthComponent from './components/AuthComponent';
@@ -27,23 +27,13 @@ import HelpUsOut from './components/HelpUsOut';
 import ShiftTradeModal from './components/ShiftTradeModal';
 
 import { generateClassPdf } from './utils/pdfGenerator';
-import { LayoutDashboard, ClipboardList, Library, Shield, Calendar, HelpingHand, UserCheck, BookOpen } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, Library, Shield, Calendar, HelpingHand, UserCheck, BookOpen, Palette } from 'lucide-react';
 
 export default function App() {
     const [user, setUser] = useState(null);
+    const [currentUser, setCurrentUser] = useState(null);
     const [isAuthLoading, setIsAuthLoading] = useState(true);
-    const [branding, setBranding] = useState({
-        siteLogo: null,
-        brandIconUrl: null,
-        logos: [],
-        mainTitle: 'Training & Scheduling Attendance Management',
-        loginTitle: 'Welcome',
-        primary: '#052D39',
-        primaryHover: '#b13710',
-        accent: '#052D39',
-        accentHover: '#b13710',
-    });
-
+    const [branding, setBranding] = useState({});
     const [stations, setStations] = useState([]);
     const [classes, setClasses] = useState([]);
     const [allUsers, setAllUsers] = useState([]);
@@ -61,7 +51,6 @@ export default function App() {
     const [isCertificateModalOpen, setIsCertificateModalOpen] = useState(false);
     const [confirmAction, setConfirmAction] = useState(null);
     const [enrollmentError, setEnrollmentError] = useState(null);
-
     const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
     const [tradeableShift, setTradeableShift] = useState(null);
     const [shiftTradeRequests, setShiftTradeRequests] = useState([]);
@@ -74,12 +63,11 @@ export default function App() {
         const unsubBranding = onSnapshot(brandingRef, (doc) => {
             if (doc.exists()) {
                 const data = doc.data();
-                setBranding(prev => ({ ...prev, ...data }));
+                setBranding(data);
                 const root = document.documentElement;
-                root.style.setProperty('--color-primary', data.primary || '#052D39');
-                root.style.setProperty('--color-primary-hover', data.primaryHover || '#b13710');
-                root.style.setProperty('--color-accent', data.accent || '#052D39');
-                root.style.setProperty('--color-accent-hover', data.accentHover || '#b13710');
+                root.style.setProperty('--color-primary', data.primaryColor || '#052D39');
+                root.style.setProperty('--color-accent', data.accentColor || '#052D39');
+                // You can add hover color variables here if they are in your branding data
             }
         });
 
@@ -87,10 +75,14 @@ export default function App() {
             setLoginMessage('');
             if (authUser) {
                 const unsubUser = onSnapshot(doc(db, "users", authUser.uid), (userDoc) => {
-                    if (!userDoc.exists()) return;
-                    const userData = userDoc.data();
+                    if (!userDoc.exists()) {
+                        setIsAuthLoading(false);
+                        return;
+                    };
+                    const userData = { id: userDoc.id, ...userDoc.data() };
                     if (userData.isApproved) {
-                        setUser({ uid: authUser.uid, id: userDoc.id, ...userData });
+                        setUser(authUser);
+                        setCurrentUser(userData);
                     } else {
                         signOut(auth);
                         setLoginMessage("Your account is pending administrator approval.");
@@ -100,6 +92,7 @@ export default function App() {
                 return () => unsubUser();
             } else {
                 setUser(null);
+                setCurrentUser(null);
                 setIsAuthLoading(false);
             }
         });
@@ -107,7 +100,7 @@ export default function App() {
     }, []);
 
     useEffect(() => {
-        if (isAuthLoading || (!user && !isTimeClockView && !isClassClockView)) {
+        if (isAuthLoading || (!currentUser && !isTimeClockView && !isClassClockView)) {
             return;
         }
 
@@ -128,9 +121,7 @@ export default function App() {
             const path = name === 'users'
                 ? name
                 : `artifacts/${appId}/public/data/${name}`;
-
             const q = query(collection(db, path));
-            
             return onSnapshot(q, (snapshot) => {
                 setter(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             }, (err) => console.error(`Failed to load ${name}:`, err));
@@ -143,15 +134,15 @@ export default function App() {
         unsubscribers.push(unsubTrades);
 
         return () => unsubscribers.forEach(unsub => unsub());
-    }, [user, isAuthLoading, isTimeClockView, isClassClockView]);
+    }, [currentUser, isAuthLoading, isTimeClockView, isClassClockView]);
 
     const myAssignments = useMemo(() => {
-        if (!user) return [];
+        if (!currentUser) return [];
         const assignments = [];
-        stations.forEach(s => { if (user.assignments && user.assignments[s.id]) assignments.push({ ...s, type: 'station' }); });
-        classes.forEach(c => { if (c.leadInstructorId === user.uid) assignments.push({ ...c, type: 'class', id: c.id, name: `${c.name} (Lead)` }); });
+        stations.forEach(s => { if (currentUser.assignments && currentUser.assignments[s.id]) assignments.push({ ...s, type: 'station' }); });
+        classes.forEach(c => { if (c.leadInstructorId === currentUser.uid) assignments.push({ ...c, type: 'class', id: c.id, name: `${c.name} (Lead)` }); });
         return assignments;
-    }, [stations, classes, user]);
+    }, [stations, classes, currentUser]);
 
     const usersForApproval = useMemo(() => allUsers.filter(u => u.needsApproval), [allUsers]);
 
@@ -167,10 +158,10 @@ export default function App() {
     const handleCloseTradeModal = () => { setTradeableShift(null); setIsTradeModalOpen(false); };
 
     const handleSubmitShiftTrade = async ({ requesterShift, requestedUser, requestedShift }) => {
-        if (!user || !requesterShift || !requestedUser || !requestedShift) return;
+        if (!currentUser || !requesterShift || !requestedUser || !requestedShift) return;
         await addDoc(collection(db, `artifacts/${appId}/public/data/shiftTradeRequests`), {
-            requesterId: user.uid,
-            requesterName: `${user.firstName} ${user.lastName}`,
+            requesterId: currentUser.uid,
+            requesterName: `${currentUser.firstName} ${currentUser.lastName}`,
             requesterShiftId: requesterShift.id,
             requesterShiftInfo: `${new Date(requesterShift.date).toLocaleDateString()} - ${requesterShift.type}`,
             requestedUserId: requestedUser.id,
@@ -178,7 +169,7 @@ export default function App() {
             requestedShiftId: requestedShift.id,
             requestedShiftInfo: `${new Date(requestedShift.date).toLocaleDateString()} - ${requestedShift.type}`,
             status: 'pending_user_approval',
-            approvals: { [user.uid]: true },
+            approvals: { [currentUser.uid]: true },
             requestTimestamp: serverTimestamp(),
         });
         handleCloseTradeModal();
@@ -188,7 +179,7 @@ export default function App() {
         const tradeRequestRef = doc(db, `artifacts/${appId}/public/data/shiftTradeRequests`, tradeRequest.id);
         await updateDoc(tradeRequestRef, {
             status: 'pending_leader_approval',
-            approvals: { ...tradeRequest.approvals, [user.uid]: true }
+            approvals: { ...tradeRequest.approvals, [currentUser.uid]: true }
         });
     };
 
@@ -196,8 +187,8 @@ export default function App() {
         const tradeRequestRef = doc(db, `artifacts/${appId}/public/data/shiftTradeRequests`, tradeRequest.id);
         await updateDoc(tradeRequestRef, {
             status: 'denied',
-            deniedBy: user.uid,
-            deniedByName: `${user.firstName} ${user.lastName}`
+            deniedBy: currentUser.uid,
+            deniedByName: `${currentUser.firstName} ${currentUser.lastName}`
         });
     };
 
@@ -227,8 +218,8 @@ export default function App() {
                 
                 const approvalData = {
                     status: 'approved',
-                    approvedBy: user.uid,
-                    approvedByName: `${user.firstName} ${user.lastName}`,
+                    approvedBy: currentUser.uid,
+                    approvedByName: `${currentUser.firstName} ${currentUser.lastName}`,
                     approvalTimestamp: serverTimestamp()
                 };
                 
@@ -243,7 +234,7 @@ export default function App() {
     const handlePrerequisiteCheckin = async (course) => {
         const todayISO = new Date().toISOString().split('T')[0];
         const checkInData = {
-            studentId: user.uid,
+            studentId: currentUser.uid,
             classId: course.id,
             checkInDate: todayISO,
             checkInTime: serverTimestamp(),
@@ -253,7 +244,7 @@ export default function App() {
     };
 
     const handleEnroll = async (classId) => {
-        if (!user) return;
+        if (!currentUser) return;
         setEnrollmentError(null);
         
         const enrollInCourseFn = httpsCallable(functions, 'enrollInCourse');
@@ -271,7 +262,7 @@ export default function App() {
             title: "Cancel Enrollment",
             message: "Are you sure you want to cancel your enrollment in this course? This action cannot be undone.",
             action: async () => {
-                const userRef = doc(db, "users", user.uid);
+                const userRef = doc(db, "users", currentUser.uid);
                 await updateDoc(userRef, {
                     enrolledClasses: arrayRemove(classId)
                 });
@@ -404,33 +395,33 @@ export default function App() {
         }
     };
 
-    if (isAuthLoading || (user && !user.firstName && !isTimeClockView && !isClassClockView)) {
+    if (isAuthLoading || (currentUser && !currentUser.firstName && !isTimeClockView && !isClassClockView)) {
         return <div className="flex items-center justify-center h-screen bg-gray-100"><div className="text-xl font-semibold text-gray-600">Loading Application...</div></div>;
     }
     if (isTimeClockView) return <TimeClock {...{users: allUsers, timeClockEntries, onClockIn: handleClockIn, onClockOut: handleClockOut, branding, timeClocks}} />;
     if (isClassClockView) return <ClassClock {...{users: allUsers, classes, stations, dailyCheckIns, handleClassCheckIn, handleClassCheckOut, branding, timeClocks}} />;
-    if (!user) return <AuthComponent {...{logoUrl: branding.siteLogo, loginTitle: branding.loginTitle, authMessage: loginMessage, setAuthMessage: setLoginMessage}} />;
+    if (!currentUser) return <AuthComponent {...{logoUrl: branding.logoUrl, loginTitle: branding.loginTitle, authMessage: loginMessage, setAuthMessage: setLoginMessage}} />;
 
-    const isInstructor = user.isAdmin || (user.roles && INSTRUCTOR_ROLES.some(role => user.roles.includes(role)));
-    const isPatrolLeadership = user.isAdmin || (user.roles && PATROL_LEADER_ROLES.some(role => user.roles.includes(role)));
-    const isPatrolAdmin = user.isAdmin || (user.roles && PATROL_ADMIN_ROLES.some(role => user.roles.includes(role)));
+    const isInstructor = currentUser.isAdmin || (currentUser.roles && INSTRUCTOR_ROLES.some(role => currentUser.roles.includes(role)));
+    const isPatrolLeadership = currentUser.isAdmin || (currentUser.roles && PATROL_LEADER_ROLES.some(role => currentUser.roles.includes(role)));
+    const isPatrolAdmin = currentUser.isAdmin || (currentUser.roles && PATROL_ADMIN_ROLES.some(role => currentUser.roles.includes(role)));
     const canManageAttendance = isInstructor || isPatrolLeadership || isPatrolAdmin;
 
 
     const renderContent = () => {
-        const enrolledClassesDetails = classes.filter(c => user.enrolledClasses?.includes(c.id));
+        const enrolledClassesDetails = classes.filter(c => currentUser.enrolledClasses?.includes(c.id));
         if(activeClassId) {
             const activeClass = classes.find(c => c.id === activeClassId);
             return <MyStations activeClass={activeClass} stations={stations} onBack={() => setActiveClassId(null)} />
         }
         switch (view) {
-            case 'admin': return <AdminPortal {...{ currentUser: user, stations, classes, allUsers, setConfirmAction, onApproveUser: handleApproveUser, branding }} />;
-            case 'siteBranding': return <div className="p-4 sm:p-6 lg:p-8"><Branding branding={branding} onUpdate={setBranding} /></div>;
+            case 'admin': return <AdminPortal {...{ currentUser, stations, classes, allUsers, setConfirmAction, onApproveUser: handleApproveUser, branding }} />;
+            case 'branding': return <Branding branding={branding} />;
             case 'myTraining':
-                return <MyTraining {...{ user, enrolledClassesDetails, dailyCheckIns, setActiveClassId, handlePrerequisiteCheckin, handleCancelEnrollment, allUsers, classes, stations, checkIns, generateClassPdf }} />;
+                return <MyTraining {...{ user: currentUser, enrolledClassesDetails, dailyCheckIns, setActiveClassId, handlePrerequisiteCheckin, handleCancelEnrollment, allUsers, classes, stations, checkIns, generateClassPdf }} />;
             case 'attendance': 
                 return <AttendanceTabs {...{ 
-                    currentUser: user,
+                    currentUser,
                     allUsers, 
                     classes, 
                     stations, 
@@ -446,13 +437,13 @@ export default function App() {
                 }} />;
             
             case 'catalog': 
-                return <CourseCatalog currentUser={user} classes={classes} handleEnroll={handleEnroll} />;
+                return <CourseCatalog user={user} currentUser={currentUser} classes={classes} handleEnroll={handleEnroll} />;
 
-            case 'profile': return <ProfileManagement {...{ user, setConfirmAction }} />;
+            case 'profile': return <ProfileManagement {...{ user: currentUser, setConfirmAction }} />;
             
             case 'mySchedule':
                 return <MySchedule 
-                    currentUser={user}
+                    currentUser={currentUser}
                     allUsers={allUsers}
                     shifts={shifts}
                     timeClockEntries={timeClockEntries}
@@ -460,7 +451,7 @@ export default function App() {
                 />;
             case 'helpUsOut':
                 return <HelpUsOut
-                    currentUser={user}
+                    currentUser={currentUser}
                     allUsers={allUsers}
                     shifts={shifts}
                     classes={classes}
@@ -469,7 +460,7 @@ export default function App() {
             case 'scheduleManagement':
                 return isPatrolLeadership 
                     ? <ShiftManagement
-                        currentUser={user}
+                        currentUser={currentUser}
                         allUsers={allUsers}
                         patrols={stations.filter(s => s.type === 'patrol')}
                     />
@@ -477,7 +468,7 @@ export default function App() {
             case 'dashboard':
             default:
                 return <Dashboard {...{
-                    user,
+                    user: currentUser,
                     isInstructor,
                     isStudent: !isInstructor,
                     enrolledClassesDetails,
@@ -511,14 +502,14 @@ export default function App() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center py-4">
                         <div className="flex items-center space-x-4">
-                            {branding.siteLogo && <img src={branding.siteLogo} alt="Logo" className="h-10" />}
+                            {branding.logoUrl && <img src={branding.logoUrl} alt="Logo" className="h-10" />}
                             <div>
                                 <h1 className="text-2xl font-bold text-gray-900">{branding.mainTitle}</h1>
-                                <p className="text-sm text-gray-500">Welcome, <span className="font-semibold text-accent">{user.firstName} {user.lastName}</span></p>
+                                <p className="text-sm text-gray-500">Welcome, <span className="font-semibold text-accent">{currentUser.firstName} {currentUser.lastName}</span></p>
                             </div>
                         </div>
                         <div className="flex items-center space-x-4">
-                            {user.isAdmin && <button onClick={() => handleNavClick('siteBranding')} className="text-sm font-medium text-accent hover:text-accent-hover">Site Branding</button>}
+                            {currentUser.isAdmin && <button onClick={() => handleNavClick('branding')} className="text-sm font-medium text-accent hover:text-accent-hover flex items-center"><Palette size={18} className="mr-1"/> Site Branding</button>}
                             <button onClick={() => handleNavClick('profile')} className="text-sm font-medium text-accent hover:text-accent-hover">My Profile</button>
                             <button onClick={handleSignOut} className="text-sm font-medium text-accent hover:text-accent-hover">Sign Out</button>
                         </div>
@@ -538,7 +529,7 @@ export default function App() {
                         
                         {isPatrolLeadership && <button onClick={() => handleNavClick('scheduleManagement')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'scheduleManagement' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserCheck className="mr-1.5 h-4 w-4" />Schedule Management</button>}
 
-                        {user.isAdmin && <button onClick={() => handleNavClick('admin')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'admin' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Shield className="mr-1.5 h-4 w-4" />Admin Portal</button>}
+                        {currentUser.isAdmin && <button onClick={() => handleNavClick('admin')} className={`py-3 px-1 border-b-2 text-sm font-medium flex items-center shrink-0 ${view === 'admin' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Shield className="mr-1.5 h-4 w-4" />Admin Portal</button>}
                     </nav>
                 </div>
             </header>
@@ -549,7 +540,7 @@ export default function App() {
                 <ShiftTradeModal
                     isOpen={isTradeModalOpen}
                     onClose={handleCloseTradeModal}
-                    currentUser={user}
+                    currentUser={currentUser}
                     shiftToTrade={tradeableShift}
                     allUsers={allUsers}
                     shifts={shifts}
