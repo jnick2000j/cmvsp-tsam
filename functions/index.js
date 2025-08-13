@@ -114,3 +114,60 @@ exports.enrollStudent = onCall(async (request) => {
         throw new HttpsError('internal', 'An error occurred while enrolling the student.');
     }
 });
+
+// --- NEW: processEnrollmentApproval function ---
+exports.processEnrollmentApproval = onCall(async (request) => {
+    const { classId, studentId, action } = request.data;
+    const uid = request.auth.uid;
+    const appId = "cmvsp-tsam"; // This should be retrieved from a config or request data
+
+    if (!uid) {
+        throw new HttpsError('unauthenticated', 'You must be logged in to perform this action.');
+    }
+
+    const db = getFirestore();
+    const classRef = db.collection(`artifacts/${appId}/public/data/classes`).doc(classId);
+    const enrollmentRef = classRef.collection('enrollments').doc(studentId);
+    const userRef = db.collection('users').doc(studentId);
+
+    const enrollmentDoc = await enrollmentRef.get();
+    if (!enrollmentDoc.exists || enrollmentDoc.data().status !== 'pending') {
+        throw new HttpsError('failed-precondition', 'Enrollment is not in a pending state.');
+    }
+
+    // Check if the user performing the action is an admin or lead instructor
+    const classDoc = await classRef.get();
+    const classData = classDoc.data();
+    const isLeadInstructor = classData.leadInstructorId === uid;
+    const callingUserDoc = await db.collection('users').doc(uid).get();
+    const isAdmin = callingUserDoc.data()?.isAdmin;
+
+    if (!isAdmin && !isLeadInstructor) {
+        throw new HttpsError('permission-denied', 'You do not have permission to approve or deny this enrollment.');
+    }
+
+    if (action === 'approve') {
+        await enrollmentRef.update({
+            status: 'approved',
+            approvedAt: FieldValue.serverTimestamp(),
+            approvedBy: uid,
+        });
+
+        // Add class to student's enrolledClasses list
+        await userRef.update({
+            enrolledClasses: FieldValue.arrayUnion(classId),
+        });
+
+        return { success: true, message: 'Enrollment approved successfully.' };
+    } else if (action === 'deny') {
+        await enrollmentRef.update({
+            status: 'denied',
+            deniedAt: FieldValue.serverTimestamp(),
+            deniedBy: uid,
+        });
+        
+        return { success: true, message: 'Enrollment denied successfully.' };
+    } else {
+        throw new HttpsError('invalid-argument', 'Invalid action specified.');
+    }
+});
