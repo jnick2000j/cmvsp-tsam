@@ -1,6 +1,7 @@
 // src/components/CourseCatalog.js
 import React, { useState, useMemo } from 'react';
 import { Calendar, MapPin, Hourglass, Search } from 'lucide-react';
+import Icon from './Icon'; // NEW: Import the Icon component
 
 const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError, logoUrl }) => {
     const [searchTerm, setSearchTerm] = useState('');
@@ -23,7 +24,7 @@ const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError
                 }
                 return true; // Show if no roles are specified
             })
-            .filter(course => 
+            .filter(course =>
                 course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (getLeadInstructorName(course.leadInstructorId) || '').toLowerCase().includes(searchTerm.toLowerCase())
             );
@@ -60,9 +61,17 @@ const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError
                         <div key={course.id} className={`bg-white rounded-xl shadow-lg overflow-hidden flex flex-col ${isPast ? 'opacity-60' : ''}`}>
                             <div className="p-5 border-b">
                                 <div className="flex justify-between items-start">
-                                    <div>
-                                        <h3 className="text-lg font-bold text-gray-800">{course.name}</h3>
-                                        <p className="text-sm text-gray-500">Lead Instructor: {getLeadInstructorName(course.leadInstructorId)}</p>
+                                    <div className="flex items-center space-x-4">
+                                        {/* NEW: Display the class icon here */}
+                                        {course.iconUrl && (
+                                            <div className="bg-gray-100 p-3 rounded-full">
+                                                <Icon name={course.iconUrl} className="h-6 w-6 text-gray-700" />
+                                            </div>
+                                        )}
+                                        <div>
+                                            <h3 className="text-lg font-bold text-gray-800">{course.name}</h3>
+                                            <p className="text-sm text-gray-500">Lead Instructor: {getLeadInstructorName(course.leadInstructorId)}</p>
+                                        </div>
                                     </div>
                                     {isPast && <span className="text-xs font-semibold bg-gray-200 text-gray-700 px-2 py-1 rounded-full">CLOSED</span>}
                                 </div>

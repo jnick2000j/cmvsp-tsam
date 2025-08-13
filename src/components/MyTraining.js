@@ -1,6 +1,7 @@
 // src/components/MyTraining.js
 import React, { useState } from 'react';
 import TrainingHistory from './TrainingHistory';
+import Icon from './Icon'; // Ensure Icon component is imported
 
 const EnrolledCourses = ({
   user,
@@ -17,7 +18,15 @@ const EnrolledCourses = ({
             return (
               <div key={course.id} className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col">
                 <div className="p-5 border-b flex-grow">
-                  <h3 className="text-lg font-bold text-gray-800">{course.name}</h3>
+                  <div className="flex items-center space-x-4 mb-3">
+                    {/* NEW: Display the class icon here */}
+                    {course.iconUrl && (
+                      <div className="bg-gray-100 p-3 rounded-full">
+                        <Icon name={course.iconUrl} className="h-6 w-6 text-gray-700" />
+                      </div>
+                    )}
+                    <h3 className="text-lg font-bold text-gray-800">{course.name}</h3>
+                  </div>
                   <p className="text-sm text-gray-500">{course.startDate}</p>
                   {course.studentGroups?.[user.uid] && (
                     <p className="text-sm font-semibold text-indigo-600 mt-1">
