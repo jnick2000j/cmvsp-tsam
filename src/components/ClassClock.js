@@ -71,7 +71,6 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         setView('login');
     }, []);
     
-    // **REVISED: More robust state detection for active check-ins.**
     const activeCheckIns = useMemo(() => {
         if (!selectedUser) return [];
         return dailyCheckIns.filter(ci => ci.userId === selectedUser.uid && ci.checkInDate === todayISO && !ci.checkOutTime);
@@ -84,7 +83,7 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
 
         if (view === 'class_selection' && selectedUser) {
-            const timeoutDuration = 20000; // 20-second inactivity timeout
+            const timeoutDuration = 15000;
             activityTimeoutRef.current = setTimeout(resetUser, timeoutDuration);
         }
 
@@ -141,8 +140,6 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         const course = classes.find(c => c.id === classId);
         try {
             await handleClassCheckIn(selectedUser, course, null);
-            // The view will automatically update once the new check-in is detected.
-            // No need for an immediate message here, the action screen will guide them.
         } catch (error) {
             console.error("Failed to check into class:", error);
             setMessage("Error: Could not check into the class. Please try again.");
@@ -153,16 +150,13 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
     const handleStationSelect = async (stationId) => {
         if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
 
-        // Find the class the user is currently in
         const currentClass = classes.find(c => c.id === activeClassCheckIn.classId);
         const station = stations.find(s => s.id === stationId);
 
         try {
-            // First, check out of the main class entry (which has no stationId)
             await handleClassCheckOut(activeClassCheckIn.id);
-            // Then, check in specifically to the station.
             await handleClassCheckIn(selectedUser, currentClass, station);
-        } catch (error) {
+        } catch (error) { // **THIS WAS THE LINE WITH THE SYNTAX ERROR**
             console.error("Failed to check into station:", error);
             setMessage("Error: Could not check into the station. Please try again.");
             setTimeout(resetUser, 5000);
@@ -174,12 +168,11 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         
         try {
             await handleClassCheckOut(activeStationCheckIn.id);
-            // After checking out of the station, check them back into the class's main record
             const course = classes.find(c => c.id === activeStationCheckIn.classId);
             await handleClassCheckIn(selectedUser, course, null);
             setView('message');
             setMessage(`Successfully checked out of station.`);
-            setTimeout(() => setView('class_selection'), 2000); // Go back to station selection
+            setTimeout(() => setView('class_selection'), 2000);
         } catch (error) {
             console.error("Failed to check out of station:", error);
             setMessage("Error: Could not check out of the station. Please try again.");
@@ -191,7 +184,6 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
         if (activityTimeoutRef.current) clearTimeout(activityTimeoutRef.current);
         
         try {
-            // Check out of all active sessions for the user
             for (const checkIn of activeCheckIns) {
                 await handleClassCheckOut(checkIn.id);
             }
@@ -287,7 +279,12 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
     const renderActionScreen = () => {
         if (!selectedUser) return <p>Please select a user.</p>;
 
-        // **REVISED: Switched to new state variables for clarity and correctness**
+        const logoutButton = (
+            <button onClick={resetUser} className="w-full mt-6 p-3 bg-accent text-white rounded-lg font-semibold hover:bg-accent-hover flex items-center justify-center">
+                <LogOut className="mr-2 h-5 w-5" /> Log Out of Time Clock
+            </button>
+        );
+
         if (activeStationCheckIn) {
             const currentStation = stations.find(s => s.id === activeStationCheckIn.stationId);
             return (
@@ -295,13 +292,14 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                     <h2 className="text-2xl font-bold mb-2">You are checked into station: {currentStation?.name}.</h2>
                     <p className="text-gray-600 mb-6">What would you like to do?</p>
                     <div className="space-y-4">
-                        <button onClick={handleStationCheckout} className="w-full p-4 bg-yellow-500 text-white rounded-lg font-semibold hover:bg-yellow-600 flex items-center justify-center">
+                        <button onClick={handleStationCheckout} className="w-full p-4 bg-accent text-white rounded-lg font-semibold hover:bg-accent-hover flex items-center justify-center">
                             <LogOut className="mr-2 h-5 w-5" /> Check Out of Station
                         </button>
-                        <button onClick={handleClassCheckout} className="w-full p-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 flex items-center justify-center">
+                        <button onClick={handleClassCheckout} className="w-full p-4 bg-accent text-white rounded-lg font-semibold hover:bg-accent-hover flex items-center justify-center">
                             <LogOut className="mr-2 h-5 w-5" /> Check Out of Class
                         </button>
                     </div>
+                    {logoutButton}
                 </div>
             );
         }
@@ -317,21 +315,21 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                             {availableStations.map(station => (
                                 <button key={station.id} onClick={() => handleStationSelect(station.id)} className="w-full text-left p-4 mb-3 bg-white rounded-lg shadow hover:bg-gray-50 flex justify-between items-center">
                                     <p className="font-semibold">{station.name}</p>
-                                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                                    <ChevronRight className="h-5 w-5 text-green-500" />
                                 </button>
                             ))}
                         </>
                     ) : (
                         <p className="mb-6">There are no stations available for this class.</p>
                     )}
-                    <button onClick={handleClassCheckout} className="w-full mt-4 p-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 flex items-center justify-center">
+                    <button onClick={handleClassCheckout} className="w-full mt-4 p-4 bg-accent text-white rounded-lg font-semibold hover:bg-accent-hover flex items-center justify-center">
                         <LogOut className="mr-2 h-5 w-5" /> Check Out of Class
                     </button>
+                    {logoutButton}
                 </div>
             );
         }
 
-        // Default view: No active check-ins, show available classes
         const enrolledClasses = classes.filter(c => selectedUser.enrolledClasses?.includes(c.id) && !c.isCompleted);
         return (
             <div>
@@ -346,6 +344,7 @@ const ClassClock = ({ users, classes, stations, dailyCheckIns, handleClassCheckI
                         <LogIn className="h-5 w-5 text-green-500" />
                     </button>
                 )) : <p>No available classes for enrollment.</p>}
+                 {logoutButton}
             </div>
         );
     };
