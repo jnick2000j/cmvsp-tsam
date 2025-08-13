@@ -15,6 +15,12 @@ import {
 } from 'lucide-react';
 
 const Icon = ({ name, ...props }) => {
+    // Check if the name is a URL
+    if (name && (name.startsWith('http://') || name.startsWith('https://'))) {
+        return <img src={name} alt="" {...props} />;
+    }
+
+    // Otherwise, assume it is a Lucide icon name
     const LucideIcons = {
         ShieldCheck,
         ClipboardList,
@@ -26,7 +32,8 @@ const Icon = ({ name, ...props }) => {
         FileSignature,
         Layers,
         Activity,
-        Handshake
+        Handshake,
+        // ... add other icons as needed
     };
 
     const IconComponent = LucideIcons[name];

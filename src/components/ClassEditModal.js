@@ -1,9 +1,7 @@
 // src/components/ClassEditModal.js
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { doc, updateDoc, addDoc, collection, arrayRemove, getDocs, deleteDoc } from 'firebase/firestore';
-// MODIFICATION: Added 'functions' to the import
 import { db, functions } from '../firebaseConfig';
-// MODIFICATION: Added 'httpsCallable' to communicate with the backend
 import { httpsCallable } from 'firebase/functions';
 import { appId, INSTRUCTOR_ROLES, SUPPORT_ROLES } from '../constants';
 import { PlusCircle, Trash2, ChevronLeft, Check } from 'lucide-react';
@@ -58,18 +56,19 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
 };
 
 
-const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser, waivers, branding }) => {
+// MODIFIED: Added `icons` to the component props
+const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser, waivers, branding, icons }) => {
     const [formData, setFormData] = useState({});
     const [numGroups, setNumGroups] = useState(1);
-    // --- NEW: State for the enrollment feature ---
     const [enrolledStudentsList, setEnrolledStudentsList] = useState([]);
     const [selectedStudent, setSelectedStudent] = useState('');
 
-
     const allRoles = useMemo(() => ['Student', ...INSTRUCTOR_ROLES, ...SUPPORT_ROLES], []);
     
+    // MODIFIED: Added 'iconUrl' field
     const getInitialFormData = useCallback(() => ({
         name: '', 
+        iconUrl: '', // NEW iconUrl field
         startDate: '', 
         endDate: '', 
         hours: '', 
@@ -86,11 +85,10 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         isCompleted: false
     }), [currentUser]);
 
-    // --- NEW: Fetches the list of enrolled students from the subcollection ---
     const fetchEnrolledStudents = useCallback(async (classId) => {
         if (!classId) return;
         try {
-            const enrollmentsRef = collection(db, 'classes', classId, 'enrollments');
+            const enrollmentsRef = collection(db, `artifacts/${appId}/public/data/classes`, classId, 'enrollments');
             const snapshot = await getDocs(enrollmentsRef);
             const studentIds = snapshot.docs.map(doc => doc.id);
             const enrolled = allUsers.filter(user => studentIds.includes(user.id));
@@ -111,12 +109,11 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                 setFormData(data);
                 const maxGroup = Object.values(data.studentGroups || {}).reduce((max, num) => Math.max(max, num), 1);
                 setNumGroups(maxGroup);
-                // --- NEW: Fetch students when modal opens for an existing class ---
                 fetchEnrolledStudents(classToEdit.id);
             } else {
                 setFormData(getInitialFormData());
                 setNumGroups(1);
-                setEnrolledStudentsList([]); // Reset for new class
+                setEnrolledStudentsList([]);
             }
         }
     }, [classToEdit, isOpen, getInitialFormData, fetchEnrolledStudents]);
@@ -184,21 +181,17 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         setFormData({ ...formData, studentGroups: { ...formData.studentGroups, [studentId]: parseInt(group, 10) } });
     };
     
-    // --- MODIFICATION: Updated to work with the new subcollection model ---
     const handleUnenrollStudent = async (studentId) => {
         if (!classToEdit) return;
         try {
-            // First, remove from the class's subcollection
-            const enrollmentRef = doc(db, "classes", classToEdit.id, "enrollments", studentId);
+            const enrollmentRef = doc(db, `artifacts/${appId}/public/data/classes`, classToEdit.id, "enrollments", studentId);
             await deleteDoc(enrollmentRef);
 
-            // Then, update the user's document
             const userRef = doc(db, "users", studentId);
             await updateDoc(userRef, {
                 enrolledClasses: arrayRemove(classToEdit.id)
             });
 
-            // Finally, refresh the UI
             fetchEnrolledStudents(classToEdit.id);
         } catch (error) {
             console.error("Error unenrolling student:", error);
@@ -206,7 +199,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         }
     };
 
-    // --- NEW: Handler for the manual enrollment button ---
     const handleManualEnroll = async () => {
         if (!selectedStudent) {
             alert("Please select a student to enroll.");
@@ -222,8 +214,8 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
             const result = await enrollStudentFn({ classId: classToEdit.id, studentId: selectedStudent });
             if (result.data.success) {
                 alert(result.data.message);
-                setSelectedStudent(''); // Reset dropdown
-                fetchEnrolledStudents(classToEdit.id); // Refresh the list
+                setSelectedStudent('');
+                fetchEnrolledStudents(classToEdit.id);
             } else {
                 throw new Error(result.data.message);
             }
@@ -253,7 +245,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         } catch (err) { console.error(err); }
     };
 
-    // Your existing logic for who can manage enrollment
     const canManageEnrollment = currentUser.isAdmin || currentUser.uid === formData.leadInstructorId;
 
     return (
@@ -261,21 +252,30 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
             <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
                 <div className="p-6 border-b"><h2 className="text-2xl font-bold text-gray-800">{classToEdit ? 'Edit Class' : 'Add New Class'}</h2></div>
                 <div className="p-6 space-y-4 overflow-y-auto">
-                    {/* ALL YOUR ORIGINAL FORM FIELDS ARE UNCHANGED */}
-                    <div><label className="block text-sm font-medium text-gray-700">Class Name</label><input name="name" value={formData.name || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <div><label className="block text-sm font-medium text-gray-700">Start Date</label><input type="date" name="startDate" value={formData.startDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
-                         <div><label className="block text-sm font-medium text-gray-700">End Date</label><input type="date" name="endDate" value={formData.endDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Class Name</label>
+                        <input name="name" value={formData.name || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
                     </div>
-                    {/* ... other original form fields ... */}
+                    {/* NEW: Field for selecting an icon */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Icon</label>
+                        <select name="iconUrl" value={formData.iconUrl || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                            <option value="">-- Select an icon --</option>
+                            {(icons || []).map(icon => (
+                                <option key={icon.id} value={icon.url}>{icon.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><label className="block text-sm font-medium text-gray-700">Start Date</label><input type="date" name="startDate" value={formData.startDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
+                        <div><label className="block text-sm font-medium text-gray-700">End Date</label><input type="date" name="endDate" value={formData.endDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
+                    </div>
                     <div><label className="block text-sm font-medium text-gray-700">Lead Instructor</label><select name="leadInstructorId" value={formData.leadInstructorId || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">{instructors.map(i => <option key={i.id} value={i.id}>{i.firstName} {i.lastName}</option>)}</select></div>
-                    {/* ... other original form fields ... */}
 
-                    {/* --- NEW: MANUAL ENROLLMENT UI --- */}
                     {classToEdit && canManageEnrollment && (
                         <div>
                             <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Manual Enrollment</h3>
-                             <div className="mt-2 p-4 border rounded-md bg-gray-50">
+                            <div className="mt-2 p-4 border rounded-md bg-gray-50">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Enroll a User</label>
                                 <div className="flex items-center space-x-2">
                                     <select 
@@ -300,7 +300,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                         </div>
                     )}
                     
-                    {/* --- YOUR ORIGINAL ENROLLMENT/GROUP MANAGEMENT SECTION --- */}
                     {classToEdit && (
                         <div>
                             <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Group & Enrollment Management</h3>
@@ -332,11 +331,62 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                             </div>
                         </div>
                     )}
-
-                    {/* ALL YOUR OTHER ORIGINAL SECTIONS ARE UNCHANGED */}
+                    
                     <div>
-                         <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Support Needs</h3>
-                         {/* ...your support needs mapping... */}
+                        <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Support Needs</h3>
+                        <p className="mt-1 text-sm text-gray-500">Add instructors or other personnel to assist with this class.</p>
+                        <div className="mt-4 space-y-3">
+                            {(formData.supportNeeds || []).map((need, index) => (
+                                <div key={need.id} className="flex items-center space-x-2 p-3 bg-gray-50 rounded-md">
+                                    <div className="flex-grow grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        <div><label className="block text-xs font-medium text-gray-500">Need</label><input type="text" name="need" value={need.need} onChange={(e) => handleSupportChange(index, 'need', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm" placeholder="e.g., Lead Instructor, Paramedic" /></div>
+                                        <div><label className="block text-xs font-medium text-gray-500">Date</label><input type="date" name="date" value={need.date} onChange={(e) => handleSupportChange(index, 'date', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm" /></div>
+                                        <div className="grid grid-cols-2 gap-2"><div><label className="block text-xs font-medium text-gray-500">Start</label><input type="time" name="startTime" value={need.startTime} onChange={(e) => handleSupportChange(index, 'startTime', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm" /></div><div><label className="block text-xs font-medium text-gray-500">End</label><input type="time" name="endTime" value={need.endTime} onChange={(e) => handleSupportChange(index, 'endTime', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm" /></div></div>
+                                        <div><label className="block text-xs font-medium text-gray-500">Assigned To</label><select name="assignedUserId" value={need.assignedUserId} onChange={(e) => handleSupportChange(index, 'assignedUserId', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm"><option value="">Unassigned</option>{instructors.map(i => <option key={i.id} value={i.id}>{i.firstName} {i.lastName}</option>)}</select></div>
+                                    </div>
+                                    <button type="button" onClick={() => removeSupportNeed(index)} className="p-2 text-red-500 hover:bg-red-100 rounded-md"><Trash2 size={18} /></button>
+                                </div>
+                            ))}
+                            <button type="button" onClick={addSupportNeed} className="flex items-center text-primary-dark hover:text-primary-hover text-sm font-medium"><PlusCircle className="mr-2" size={18} /> Add Support Need</button>
+                        </div>
+                    </div>
+                    <div className="mt-6 border-t pt-4">
+                        <label className="inline-flex items-center text-sm font-medium text-gray-700">
+                            <input type="checkbox" name="isPrerequisiteUploadRequired" checked={formData.isPrerequisiteUploadRequired || false} onChange={handleInputChange} className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" />
+                            <span className="ml-2">Require Prerequisite Upload</span>
+                        </label>
+                    </div>
+                    <div className="mt-4 border-t pt-4">
+                        <label className="block text-sm font-medium text-gray-700">Required Waivers</label>
+                        <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {waivers.map(waiver => (
+                                <label key={waiver.id} className="inline-flex items-center">
+                                    <input type="checkbox" name="waivers" checked={(formData.requiredWaivers || []).includes(waiver.id)} onChange={() => handleWaiverChange(waiver.id)} className="rounded border-gray-300 text-indigo-600 shadow-sm" />
+                                    <span className="ml-2 text-sm">{waiver.name}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="mt-4 border-t pt-4">
+                        <label className="block text-sm font-medium text-gray-700">Visible To Roles</label>
+                        <MultiSelectDropdown 
+                            options={allRoles}
+                            selected={formData.visibleToRoles || []}
+                            onChange={handleRoleVisibilityChange}
+                            placeholder="Select roles"
+                        />
+                    </div>
+                    <div className="mt-4 border-t pt-4">
+                        <label className="inline-flex items-center text-sm font-medium text-gray-700">
+                            <input type="checkbox" name="isHidden" checked={formData.isHidden || false} onChange={handleInputChange} className="rounded border-gray-300 text-indigo-600 shadow-sm" />
+                            <span className="ml-2">Hide from Course Catalog</span>
+                        </label>
+                    </div>
+                    <div className="mt-4 border-t pt-4">
+                        <label className="inline-flex items-center text-sm font-medium text-gray-700">
+                            <input type="checkbox" name="isCompleted" checked={formData.isCompleted || false} onChange={handleInputChange} className="rounded border-gray-300 text-indigo-600 shadow-sm" />
+                            <span className="ml-2">Mark as Completed</span>
+                        </label>
                     </div>
                 </div>
                 <div className="p-6 bg-gray-50 border-t flex justify-end space-x-3">

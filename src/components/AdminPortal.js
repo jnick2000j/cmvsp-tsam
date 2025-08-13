@@ -8,9 +8,9 @@ import UserEditModal from './UserEditModal';
 import StationEditModal from './StationEditModal';
 import ClassEditModal from './ClassEditModal';
 import WaiverManagement from './WaiverManagement';
-// import ShiftManagement from './ShiftManagement'; // REMOVED
 import TimeClockManagement from './TimeClockManagement';
-import { Search, Edit, Trash2, Layers, BookOpen, UserCog, FileSignature, Mail, Smartphone, UserCheck, PlusCircle, Copy } from 'lucide-react';
+import IconManagement from './IconManagement'; // NEW import
+import { Search, Edit, Trash2, Layers, BookOpen, UserCog, FileSignature, Mail, Smartphone, UserCheck, PlusCircle, Copy, Image as ImageIcon } from 'lucide-react'; // NEW: Import Image as ImageIcon
 import Icon from './Icon';
 
 const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser, branding }) => {
@@ -22,23 +22,24 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
     const [editingUser, setEditingUser] = useState(null);
     const [editingStation, setEditingStation] = useState(null);
     const [editingClass, setEditingClass] = useState(null);
-    // const [shifts, setShifts] = useState([]); // REMOVED
     const [timeClocks, setTimeClocks] = useState([]);
+    const [icons, setIcons] = useState([]); // NEW state for custom icons
 
     useEffect(() => {
-        // const shiftsQuery = query(collection(db, `artifacts/${appId}/public/data/shifts`), orderBy("date", "desc")); // REMOVED
-        // const unsubscribeShifts = onSnapshot(shiftsQuery, (snapshot) => { // REMOVED
-        //     setShifts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); // REMOVED
-        // }); // REMOVED
-
         const timeClocksQuery = query(collection(db, `artifacts/${appId}/public/data/timeclocks`));
         const unsubscribeTimeClocks = onSnapshot(timeClocksQuery, (snapshot) => {
             setTimeClocks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
 
+        // NEW: Subscribe to the 'icons' collection in Firestore
+        const iconsQuery = query(collection(db, `artifacts/${appId}/public/data/icons`));
+        const unsubscribeIcons = onSnapshot(iconsQuery, (snapshot) => {
+            setIcons(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+
         return () => {
-            // unsubscribeShifts(); // REMOVED
             unsubscribeTimeClocks();
+            unsubscribeIcons(); // NEW: Unsubscribe from the icons listener
         };
     }, []);
 
@@ -58,7 +59,6 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
         });
     };
 
-    // ... (other handlers remain the same) ...
     const handleCopyClass = async (classToCopy) => {
         try {
             const newClassData = { ...classToCopy, name: `${classToCopy.name} (Copy)` };
@@ -159,14 +159,13 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
         }
     };
 
-
     const filteredUsers = allUsers.filter(user => `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) || user.email.toLowerCase().includes(searchTerm.toLowerCase()) || (user.role && user.role.toLowerCase().includes(searchTerm.toLowerCase())) || (user.ability && user.ability.toLowerCase().includes(searchTerm.toLowerCase())));
 
     return (
         <>
             <UserEditModal isOpen={isUserModalOpen} onClose={handleCloseUserModal} userToEdit={editingUser} onSave={() => {}} />
-            <StationEditModal isOpen={isStationModalOpen} onClose={handleCloseStationModal} stationToEdit={editingStation} onSave={() => {}} classes={classes} allUsers={allUsers} />
-            <ClassEditModal isOpen={isClassModalOpen} onClose={handleCloseClassModal} classToEdit={editingClass} onSave={() => {}} instructors={instructors} allUsers={allUsers} currentUser={currentUser} waivers={waivers} branding={branding} />
+            <StationEditModal isOpen={isStationModalOpen} onClose={handleCloseStationModal} stationToEdit={editingStation} onSave={() => {}} classes={classes} allUsers={allUsers} icons={icons} />
+            <ClassEditModal isOpen={isClassModalOpen} onClose={handleCloseClassModal} classToEdit={editingClass} onSave={() => {}} instructors={instructors} allUsers={allUsers} currentUser={currentUser} waivers={waivers} branding={branding} icons={icons} />
 
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="border-b border-gray-200 mb-6">
@@ -174,13 +173,13 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         <button onClick={() => setAdminView('classes')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'classes' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Layers className="mr-2" size={18}/> Class Management</button>
                         <button onClick={() => setAdminView('stations')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'stations' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><BookOpen className="mr-2" size={18}/> Station Management</button>
                         <button onClick={() => setAdminView('users')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'users' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserCog className="mr-2" size={18}/> User Management</button>
-                        {/* <button onClick={() => setAdminView('shifts')} ... /> REMOVED */}
+                        <button onClick={() => setAdminView('icons')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'icons' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ImageIcon className="mr-2" size={18}/> Icon Management</button>
                         <button onClick={() => setAdminView('timeclocks')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'timeclocks' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Smartphone className="mr-2" size={18}/> Time Clock Devices</button>
                         <button onClick={() => setAdminView('waivers')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'waivers' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><FileSignature className="mr-2" size={18}/> Waiver Management</button>
                     </nav>
                 </div>
 
-                 {adminView === 'users' && (
+                {adminView === 'users' && (
                     <>
                         <div className="sm:flex sm:items-center sm:justify-between">
                             <div>
@@ -248,7 +247,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         </div></div></div></div>
                     </>
                 )}
-                 {adminView === 'stations' && (
+                {adminView === 'stations' && (
                     <>
                         <div className="sm:flex sm:items-center sm:justify-between"><div><h2 className="text-2xl font-bold text-gray-900">Training Stations</h2><p className="mt-1 text-sm text-gray-500">Create, edit, and manage stations and their skills.</p></div><div className="mt-4 sm:mt-0"><button onClick={handleAddStation} className="w-full flex items-center justify-center px-4 py-2 bg-primary text-white rounded-md shadow-sm hover:bg-primary-hover" disabled={classes.length === 0}><PlusCircle className="h-5 w-5 mr-2" /> Add New Station</button></div></div>
                         {classes.length === 0 && <p className="mt-4 text-yellow-700 bg-yellow-50 p-3 rounded-md">Please add a Class before adding stations.</p>}
@@ -262,7 +261,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         </div>
                     </>
                 )}
-                {/* {adminView === 'shifts' && <ShiftManagement shifts={shifts} users={allUsers} onSave={handleSaveShift} onDelete={handleDeleteShift} />} REMOVED */}
+                {adminView === 'icons' && <IconManagement icons={icons} setIcons={setIcons} />}
                 {adminView === 'timeclocks' && <TimeClockManagement timeClocks={timeClocks} onSave={handleSaveTimeClock} onDelete={handleDeleteTimeClock} />}
                 {adminView === 'waivers' && <WaiverManagement waivers={waivers} setConfirmAction={setConfirmAction} />}
             </div>

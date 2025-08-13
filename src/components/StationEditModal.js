@@ -57,8 +57,10 @@ const MultiSelectDropdown = ({ options, selected, onChange }) => {
 };
 
 
-const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, allUsers }) => {
-    const [formData, setFormData] = useState({ name: '', icon: 'BookOpen', skills: [], classId: '', date: '', startTime: '', endTime: '', hours: '', location: '', summary: '', supportNeeds: [], leadInstructorId: '', skillAssignments: {} });
+// MODIFIED: Added `icons` to the component props
+const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, allUsers, icons }) => {
+    // MODIFIED: Changed `icon` to `iconUrl` and set default to an empty string.
+    const [formData, setFormData] = useState({ name: '', iconUrl: '', skills: [], classId: '', date: '', startTime: '', endTime: '', hours: '', location: '', summary: '', supportNeeds: [], leadInstructorId: '', skillAssignments: {} });
     const [error, setError] = useState('');
 
     const instructors = useMemo(() => allUsers.filter(u => u.isAdmin || INSTRUCTOR_ROLES.includes(u.role)), [allUsers]);
@@ -82,10 +84,12 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
                     skills: normalizedSkills,
                     supportNeeds: stationToEdit.supportNeeds || [],
                     leadInstructorId: stationToEdit.leadInstructorId || '',
-                    skillAssignments: stationToEdit.skillAssignments || {}
+                    skillAssignments: stationToEdit.skillAssignments || {},
+                    iconUrl: stationToEdit.iconUrl || '', // Ensure iconUrl is set from existing data
                 });
             } else {
-                setFormData({ name: '', icon: 'BookOpen', skills: [{ id: Date.now().toString(), text: '' }], classId: classes[0]?.id || '', date: '', startTime: '', endTime: '', hours: '', location: '', summary: '', supportNeeds: [], leadInstructorId: '', skillAssignments: {} });
+                // MODIFIED: Initializing new station with an empty iconUrl
+                setFormData({ name: '', iconUrl: '', skills: [{ id: Date.now().toString(), text: '' }], classId: classes[0]?.id || '', date: '', startTime: '', endTime: '', hours: '', location: '', summary: '', supportNeeds: [], leadInstructorId: '', skillAssignments: {} });
             }
         }
     }, [stationToEdit, classes, isOpen]);
@@ -164,6 +168,7 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
             supportNeeds: finalNeeds,
             skillAssignments: finalSkillAssignments
         };
+        // REMOVED `icon` from dataToSave as it's now `iconUrl`
 
         try {
             if (stationToEdit) {
@@ -188,8 +193,26 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
                     <div className="p-6 space-y-4">
                         {error && <p className="text-red-500 bg-red-50 p-3 rounded-lg text-sm">{error}</p>}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                           <div><label className="block text-sm font-medium text-gray-700">Class</label><select name="classId" value={formData.classId} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">{classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                            <div><label className="block text-sm font-medium text-gray-700">Station Name</label><input name="name" value={formData.name} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Class</label>
+                                <select name="classId" value={formData.classId} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Station Name</label>
+                                <input name="name" value={formData.name} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
+                            </div>
+                        </div>
+                        {/* NEW: Field for selecting an icon */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Icon</label>
+                            <select name="iconUrl" value={formData.iconUrl || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                                <option value="">-- Select an icon --</option>
+                                {(icons || []).map(icon => (
+                                    <option key={icon.id} value={icon.url}>{icon.name}</option>
+                                ))}
+                            </select>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div><label className="block text-sm font-medium text-gray-700">Date</label><input type="date" name="date" value={formData.date} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
@@ -198,7 +221,7 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
                         </div>
                         <div>
                             <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Skills & Assignments</h3>
-                             <div className="mt-4">
+                            <div className="mt-4">
                                 <label className="block text-sm font-medium text-gray-700">Lead Instructor</label>
                                 <select name="leadInstructorId" value={formData.leadInstructorId} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
                                     <option value="">-- Select a Lead --</option>

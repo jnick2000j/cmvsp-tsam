@@ -23,6 +23,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Add these new rules at the same level as the 'classes' or 'stations' rules
+    match /artifacts/{appId}/public/data/icons/{iconId} {
+      allow read: if request.auth != null;
+    // Only admins can create, update, or delete icons
+    allow create, update, delete: if isAdmin();
+    }
+
     match /artifacts/{appId}/public/data/branding/settings {
       allow read: if true;
       allow write: if isAdmin();
