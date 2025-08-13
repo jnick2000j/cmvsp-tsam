@@ -65,7 +65,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
 
     const allRoles = useMemo(() => ['Student', ...INSTRUCTOR_ROLES, ...SUPPORT_ROLES], []);
     
-    // MODIFIED: Added `prerequisites` to the initial form data
+    // MODIFIED: Removed `isPrerequisiteUploadRequired`
     const getInitialFormData = useCallback(() => ({
         name: '', 
         iconUrl: '', 
@@ -78,8 +78,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         supportNeeds: [], 
         studentGroups: {}, 
         requiredWaivers: [], 
-        isPrerequisiteUploadRequired: false, 
-        prerequisites: [], // NEW: Array to hold prerequisite requirements
+        prerequisites: [],
         isHidden: false, 
         visibleToRoles: [], 
         logoUrl: '', 
@@ -107,7 +106,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                     ...getInitialFormData(), 
                     ...classToEdit,
                 };
-                // MODIFIED: Normalize prerequisites to ensure they are objects with an ID
                 const normalizedPrerequisites = (data.prerequisites || []).map((prereq, index) => ({
                     ...prereq,
                     id: prereq.id || `prereq-${Date.now()}-${index}`
@@ -149,7 +147,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         });
     };
 
-    // NEW: Handlers for prerequisites
     const handlePrereqChange = (index, field, value) => {
         const newPrerequisites = [...(formData.prerequisites || [])];
         newPrerequisites[index][field] = value;
@@ -228,32 +225,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         }
     };
 
-    const handleManualEnroll = async () => {
-        if (!selectedStudent) {
-            alert("Please select a student to enroll.");
-            return;
-        }
-        if (!classToEdit?.id) {
-            alert("Cannot enroll student because the class has not been saved yet.");
-            return;
-        }
-
-        const enrollStudentFn = httpsCallable(functions, 'enrollStudent');
-        try {
-            const result = await enrollStudentFn({ classId: classToEdit.id, studentId: selectedStudent });
-            if (result.data.success) {
-                alert(result.data.message);
-                setSelectedStudent('');
-                fetchEnrolledStudents(classToEdit.id);
-            } else {
-                throw new Error(result.data.message);
-            }
-        } catch (error) {
-            console.error("Error enrolling student:", error);
-            alert(`Enrollment failed: ${error.message}`);
-        }
-    };
-
+    // REMOVED: handleManualEnroll function entirely
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!formData.name) return;
@@ -274,8 +246,8 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         } catch (err) { console.error(err); }
     };
 
-    const canManageEnrollment = currentUser.isAdmin || currentUser.uid === formData.leadInstructorId;
-
+    // REMOVED: canManageEnrollment variable
+    
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
             <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
@@ -300,34 +272,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                     </div>
                     <div><label className="block text-sm font-medium text-gray-700">Lead Instructor</label><select name="leadInstructorId" value={formData.leadInstructorId || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">{instructors.map(i => <option key={i.id} value={i.id}>{i.firstName} {i.lastName}</option>)}</select></div>
 
-                    {classToEdit && canManageEnrollment && (
-                        <div>
-                            <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Manual Enrollment</h3>
-                            <div className="mt-2 p-4 border rounded-md bg-gray-50">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Enroll a User</label>
-                                <div className="flex items-center space-x-2">
-                                    <select 
-                                        value={selectedStudent} 
-                                        onChange={(e) => setSelectedStudent(e.target.value)} 
-                                        className="flex-grow border-gray-300 rounded-md shadow-sm"
-                                    >
-                                        <option value="">-- Select a user to enroll --</option>
-                                        {allUsers.map(user => (
-                                            <option key={user.id} value={user.id}>{user.firstName} {user.lastName} ({user.email})</option>
-                                        ))}
-                                    </select>
-                                    <button 
-                                        type="button" 
-                                        onClick={handleManualEnroll}
-                                        className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                                    >
-                                        Enroll User
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    
                     {classToEdit && (
                         <div>
                             <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Group & Enrollment Management</h3>
@@ -348,9 +292,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                                                         <option value="">Unassigned</option>
                                                         {[...Array(numGroups)].map((_, i) => <option key={i+1} value={i+1}>Group {i+1}</option>)}
                                                     </select>
-                                                    {canManageEnrollment && (
-                                                        <button type="button" onClick={() => handleUnenrollStudent(student.id)} className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded-md hover:bg-red-200">Unenroll</button>
-                                                    )}
+                                                    <button type="button" onClick={() => handleUnenrollStudent(student.id)} className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded-md hover:bg-red-200">Unenroll</button>
                                                 </div>
                                             </li>
                                         ))}
@@ -360,7 +302,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                         </div>
                     )}
                     
-                    {/* NEW: Prerequisites Section */}
                     <div>
                         <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Prerequisites</h3>
                         <p className="mt-1 text-sm text-gray-500">Define the requirements users must meet before enrolling.</p>
@@ -421,12 +362,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                             <button type="button" onClick={addSupportNeed} className="flex items-center text-primary-dark hover:text-primary-hover text-sm font-medium"><PlusCircle className="mr-2" size={18} /> Add Support Need</button>
                         </div>
                     </div>
-                    <div className="mt-6 border-t pt-4">
-                        <label className="inline-flex items-center text-sm font-medium text-gray-700">
-                            <input type="checkbox" name="isPrerequisiteUploadRequired" checked={formData.isPrerequisiteUploadRequired || false} onChange={handleInputChange} className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" />
-                            <span className="ml-2">Require Prerequisite Upload</span>
-                        </label>
-                    </div>
+                    
                     <div className="mt-4 border-t pt-4">
                         <label className="block text-sm font-medium text-gray-700">Required Waivers</label>
                         <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
