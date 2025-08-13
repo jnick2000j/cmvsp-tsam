@@ -63,14 +63,15 @@ const Branding = ({ branding }) => {
 
             const brandingRef = doc(db, `artifacts/${appId}/public/data/branding`, 'settings');
             const newLogo = { name: newLogoName.trim(), url: downloadURL };
-            
+
             await setDoc(brandingRef, { logos: arrayUnion(newLogo) }, { merge: true });
 
             setNewLogoName('');
             setFile(null);
+            document.getElementById('logoUpload').value = ''; // Clear the file input
             setMessage('Logo uploaded successfully!');
         } catch (err) {
-            setError('Failed to upload logo.');
+            setError('Failed to upload logo. Check your Firebase rules and internet connection.');
             console.error(err);
         } finally {
             setIsUploading(false);
@@ -89,7 +90,7 @@ const Branding = ({ branding }) => {
             console.error(err);
         }
     };
-    
+
     const handleSetSiteBranding = async (logoUrl) => {
         try {
             const brandingRef = doc(db, `artifacts/${appId}/public/data/branding`, 'settings');
@@ -116,7 +117,8 @@ const Branding = ({ branding }) => {
             const brandingRef = doc(db, `artifacts/${appId}/public/data/branding`, 'settings');
             await setDoc(brandingRef, { ...titles, ...colors }, { merge: true });
             setMessage('Branding settings updated successfully!');
-        } catch (err) {
+        } catch (err)
+        {
             setError('Failed to save branding settings.');
             console.error(err);
         }
@@ -128,7 +130,7 @@ const Branding = ({ branding }) => {
             <p className="mt-1 text-sm text-gray-500">Upload and manage logos and titles for the application.</p>
             {error && <p className="mt-4 text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</p>}
             {message && <p className="mt-4 text-sm text-green-600 bg-green-50 p-3 rounded-md">{message}</p>}
-            
+
             <div className="mt-6 border-t pt-6 grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6">
                 <div className="space-y-4">
                     <h3 className="text-lg font-medium text-gray-800">Application Titles</h3>
@@ -171,7 +173,8 @@ const Branding = ({ branding }) => {
             <div className="mt-6 border-t pt-6">
                 <h3 className="text-lg font-medium text-gray-800">Site Branding Logo</h3>
                 <div className="mt-2 p-4 border rounded-lg flex items-center justify-center bg-gray-50 h-24 max-w-sm mx-auto">
-                    {branding.siteLogo ? <img src={branding.siteLogo} alt="Site Logo" className="max-h-full" /> : <p className="text-gray-500">No site logo selected.</p>}
+                    {/* FIXED: Used optional chaining (?.) to prevent crash */}
+                    {branding?.siteLogo ? <img src={branding.siteLogo} alt="Site Logo" className="max-h-full" /> : <p className="text-gray-500">No site logo selected.</p>}
                 </div>
             </div>
 
@@ -202,7 +205,8 @@ const Branding = ({ branding }) => {
             <div className="mt-6 border-t pt-6">
                 <h3 className="text-lg font-medium text-gray-800">Image Library</h3>
                 <ul className="mt-4 space-y-3">
-                    {(branding.logos || []).map((logo, index) => (
+                    {/* FIXED: Used optional chaining (?.) for safety and consistency */}
+                    {(branding?.logos || []).map((logo, index) => (
                         <li key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
                             <div className="flex items-center gap-4">
                                 <img src={logo.url} alt={logo.name} className="h-10 w-10 object-contain" />
