@@ -39,6 +39,12 @@ service cloud.firestore {
       allow read, delete: if isAdmin();
     }
 
+    // Allow authenticated users to read and admins to create, update, and delete icons.
+    match /artifacts/{appId}/public/data/icons/{iconId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if isAdmin();
+    }
+
     // --- New Rules for Class Management ---
     match /classes/{classId} {
       // Any approved user can read class details

@@ -1,3 +1,4 @@
+// src/components/IconManagement.js
 import React, { useState } from 'react';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { doc, setDoc, updateDoc, deleteDoc, collection, addDoc } from 'firebase/firestore';
@@ -35,7 +36,8 @@ const IconManagement = ({ icons, setIcons }) => {
         setMessage('');
 
         try {
-            const storageRef = ref(storage, `icons/${appId}/${newIconName.trim()}_${Date.now()}`);
+            // MODIFIED: Save to a dedicated 'icons' folder
+            const storageRef = ref(storage, `artifacts/${appId}/public/icons/${newIconName.trim()}_${Date.now()}`);
             await uploadBytes(storageRef, file);
             const downloadURL = await getDownloadURL(storageRef);
 
@@ -104,7 +106,6 @@ const IconManagement = ({ icons, setIcons }) => {
                     {(icons || []).map((icon) => (
                         <li key={icon.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
                             <div className="flex items-center gap-4">
-                                {/* This assumes the image library can handle both SVG and PNG/JPG */}
                                 <img src={icon.url} alt={icon.name} className="h-10 w-10 object-contain" />
                                 <span className="font-medium">{icon.name}</span>
                             </div>
