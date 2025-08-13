@@ -10,7 +10,7 @@ const firebaseConfig = {
     authDomain: "cmvsp-tsam.firebaseapp.com",
     databaseURL: "https://cmvsp-tsam.firebaseio.com",
     projectId: "cmvsp-tsam",
-    storageBucket: "cmvsp-tsam.appspot.com",
+    storageBucket: "cmvsp-tsam.firebasestorage.app",
     messagingSenderId: "326800394138",
     appId: "1:326800394138:web:eb13d24a57ca1b215e5c23"
 };
