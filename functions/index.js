@@ -45,7 +45,7 @@ exports.createUserAccount = onCall(async (request) => {
         completedClasses: {},
         isApproved: false,
         needsApproval: true,
-        waivers: {}, // NEW: Initialize waivers as an empty object
+        waivers: {},
     };
 
     try {
@@ -63,7 +63,7 @@ exports.createUserAccount = onCall(async (request) => {
 exports.enrollStudent = onCall(async (request) => {
     const { classId, studentId, prerequisiteSubmissions = {}, waiverStatus = {} } = request.data;
     const uid = request.auth.uid;
-    const appId = "cmvsp-tsam"; // This should be retrieved from a config or request data
+    const appId = "cmvsp-tsam";
 
     if (!uid) {
         throw new HttpsError('unauthenticated', 'You must be logged in to perform this action.');
@@ -83,19 +83,17 @@ exports.enrollStudent = onCall(async (request) => {
 
     try {
         if (hasPrerequisites) {
-            // Enrollment requires approval
             await classRef.collection('enrollments').doc(studentId).set({
                 status: 'pending',
                 enrolledAt: FieldValue.serverTimestamp(),
                 submittedBy: uid,
-                prerequisiteSubmissions, // NEW: Record user's prerequisite submissions
-                waiverStatus, // NEW: Record waiver status
+                prerequisiteSubmissions,
+                waiverStatus,
             });
 
             return { success: true, message: 'Enrollment submitted for approval.' };
 
         } else {
-            // No prerequisites, auto-approve enrollment
             await classRef.collection('enrollments').doc(studentId).set({
                 status: 'approved',
                 enrolledAt: FieldValue.serverTimestamp(),
@@ -119,7 +117,7 @@ exports.enrollStudent = onCall(async (request) => {
 exports.processEnrollmentApproval = onCall(async (request) => {
     const { classId, studentId, action } = request.data;
     const uid = request.auth.uid;
-    const appId = "cmvsp-tsam"; // This should be retrieved from a config or request data
+    const appId = "cmvsp-tsam";
 
     if (!uid) {
         throw new HttpsError('unauthenticated', 'You must be logged in to perform this action.');
@@ -135,7 +133,6 @@ exports.processEnrollmentApproval = onCall(async (request) => {
         throw new HttpsError('failed-precondition', 'Enrollment is not in a pending state.');
     }
 
-    // Check if the user performing the action is an admin or lead instructor
     const classDoc = await classRef.get();
     const classData = classDoc.data();
     const isLeadInstructor = classData.leadInstructorId === uid;
@@ -153,7 +150,6 @@ exports.processEnrollmentApproval = onCall(async (request) => {
             approvedBy: uid,
         });
 
-        // Add class to student's enrolledClasses list
         await userRef.update({
             enrolledClasses: FieldValue.arrayUnion(classId),
         });
@@ -169,5 +165,44 @@ exports.processEnrollmentApproval = onCall(async (request) => {
         return { success: true, message: 'Enrollment denied successfully.' };
     } else {
         throw new HttpsError('invalid-argument', 'Invalid action specified.');
+    }
+});
+
+// --- RE-ADDED: applyShiftTemplates function ---
+exports.applyShiftTemplates = onCall(async (request) => {
+    const { date, stationId } = request.data;
+
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'You must be logged in to perform this action.');
+    }
+
+    const db = getFirestore();
+    const templatesRef = db.collection('shiftTemplates');
+    const shiftsRef = db.collection('shifts');
+
+    try {
+        const templatesQuerySnapshot = await templatesRef.where('stationId', '==', stationId).get();
+        if (templatesQuerySnapshot.empty) {
+            return { success: false, message: 'No shift templates found for this station.' };
+        }
+
+        const batch = db.batch();
+        const templates = templatesQuerySnapshot.docs.map(doc => doc.data());
+
+        for (const template of templates) {
+            const newShiftRef = shiftsRef.doc();
+            batch.set(newShiftRef, {
+                ...template,
+                date: date,
+                isTemplate: false,
+                createdAt: FieldValue.serverTimestamp()
+            });
+        }
+
+        await batch.commit();
+        return { success: true, message: `${templates.length} shifts created successfully from templates.` };
+    } catch (error) {
+        console.error("Error applying shift templates:", error);
+        throw new HttpsError('internal', 'An error occurred while applying shift templates.');
     }
 });
