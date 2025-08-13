@@ -1,10 +1,12 @@
 // src/components/CourseCatalog.js
 import React, { useState, useMemo } from 'react';
 import { Calendar, MapPin, Hourglass, Search } from 'lucide-react';
-import Icon from './Icon'; // NEW: Import the Icon component
+import Icon from './Icon';
+import PrerequisiteModal from './PrerequisiteModal'; // NEW: Import the prerequisite modal component
 
 const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError, logoUrl }) => {
     const [searchTerm, setSearchTerm] = useState('');
+    const [prerequisiteClass, setPrerequisiteClass] = useState(null); // NEW: State to manage prerequisite modal
 
     const getLeadInstructorName = (instructorId) => {
         const instructor = allUsers.find(u => u.id === instructorId);
@@ -30,8 +32,26 @@ const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError
             );
     }, [classes, searchTerm, user, allUsers, getLeadInstructorName]);
 
+    const handleEnrollClick = (course) => {
+        // NEW: Check for prerequisites and open modal if they exist
+        if (course.prerequisites && course.prerequisites.length > 0) {
+            setPrerequisiteClass(course);
+        } else {
+            // No prerequisites, proceed with original enrollment logic
+            onEnrollClick(course.id);
+        }
+    };
+
     return (
         <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+            {/* NEW: Prerequisite Modal */}
+            <PrerequisiteModal
+                isOpen={!!prerequisiteClass}
+                onClose={() => setPrerequisiteClass(null)}
+                classToEnroll={prerequisiteClass}
+                user={user}
+            />
+
             <div className="sm:flex sm:items-center sm:justify-between">
                 <div className="flex items-center space-x-4">
                     {logoUrl && <img src={logoUrl} alt="Catalog Logo" className="h-12" />}
@@ -62,7 +82,6 @@ const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError
                             <div className="p-5 border-b">
                                 <div className="flex justify-between items-start">
                                     <div className="flex items-center space-x-4">
-                                        {/* NEW: Display the class icon here */}
                                         {course.iconUrl && (
                                             <div className="bg-gray-100 p-3 rounded-full">
                                                 <Icon name={course.iconUrl} className="h-6 w-6 text-gray-700" />
@@ -84,7 +103,7 @@ const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError
                             </div>
                             <div className="p-4 bg-gray-50 border-t">
                                 <button
-                                    onClick={() => onEnrollClick(course.id)}
+                                    onClick={() => handleEnrollClick(course)}
                                     disabled={isEnrolled || isPast}
                                     className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-green-600 disabled:cursor-not-allowed"
                                 >

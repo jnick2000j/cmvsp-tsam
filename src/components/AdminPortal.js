@@ -1,6 +1,6 @@
 // src/components/AdminPortal.js
 import React, { useState, useMemo, useEffect } from 'react';
-import { doc, deleteDoc, updateDoc, query, where, getDocs, collection, addDoc, setDoc, onSnapshot, orderBy } from 'firebase/firestore';
+import { doc, deleteDoc, updateDoc, query, where, getDocs, collection, addDoc, onSnapshot } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { INSTRUCTOR_ROLES, appId } from '../constants';
@@ -9,8 +9,9 @@ import StationEditModal from './StationEditModal';
 import ClassEditModal from './ClassEditModal';
 import WaiverManagement from './WaiverManagement';
 import TimeClockManagement from './TimeClockManagement';
-import IconManagement from './IconManagement'; // NEW import
-import { Search, Edit, Trash2, Layers, BookOpen, UserCog, FileSignature, Mail, Smartphone, UserCheck, PlusCircle, Copy, Image as ImageIcon } from 'lucide-react'; // NEW: Import Image as ImageIcon
+import IconManagement from './IconManagement'; 
+import PendingEnrollmentManagement from './PendingEnrollmentManagement'; // NEW: Import PendingEnrollmentManagement component
+import { Search, Edit, Trash2, Layers, BookOpen, UserCog, FileSignature, Mail, Smartphone, UserCheck, PlusCircle, Copy, Image as ImageIcon, UserX } from 'lucide-react'; // NEW: Import UserX icon for pending approvals
 import Icon from './Icon';
 
 const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser, branding }) => {
@@ -23,7 +24,8 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
     const [editingStation, setEditingStation] = useState(null);
     const [editingClass, setEditingClass] = useState(null);
     const [timeClocks, setTimeClocks] = useState([]);
-    const [icons, setIcons] = useState([]); // NEW state for custom icons
+    const [icons, setIcons] = useState([]);
+    const [pendingEnrollments, setPendingEnrollments] = useState([]); // NEW state for pending enrollments
 
     useEffect(() => {
         const timeClocksQuery = query(collection(db, `artifacts/${appId}/public/data/timeclocks`));
@@ -31,17 +33,34 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
             setTimeClocks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
 
-        // NEW: Subscribe to the 'icons' collection in Firestore
         const iconsQuery = query(collection(db, `artifacts/${appId}/public/data/icons`));
         const unsubscribeIcons = onSnapshot(iconsQuery, (snapshot) => {
             setIcons(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
 
+        // NEW: Subscribe to pending enrollments for all classes
+        const pendingEnrollmentsListeners = classes.map(cls => {
+            const enrollmentsQuery = query(collection(db, `artifacts/${appId}/public/data/classes`, cls.id, 'enrollments'), where('status', '==', 'pending'));
+            return onSnapshot(enrollmentsQuery, (snapshot) => {
+                const newPending = snapshot.docs.map(doc => ({ 
+                    id: doc.id, 
+                    ...doc.data(), 
+                    classId: cls.id,
+                    className: cls.name,
+                }));
+                setPendingEnrollments(prev => {
+                    const otherPendings = prev.filter(p => p.classId !== cls.id);
+                    return [...otherPendings, ...newPending];
+                });
+            });
+        });
+
         return () => {
             unsubscribeTimeClocks();
-            unsubscribeIcons(); // NEW: Unsubscribe from the icons listener
+            unsubscribeIcons();
+            pendingEnrollmentsListeners.forEach(unsub => unsub());
         };
-    }, []);
+    }, [classes]); // Re-run effect if the list of classes changes
 
     const instructors = useMemo(() => allUsers.filter(u => INSTRUCTOR_ROLES.includes(u.role) || u.isAdmin), [allUsers]);
 
@@ -174,6 +193,9 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         <button onClick={() => setAdminView('stations')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'stations' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><BookOpen className="mr-2" size={18}/> Station Management</button>
                         <button onClick={() => setAdminView('users')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'users' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserCog className="mr-2" size={18}/> User Management</button>
                         <button onClick={() => setAdminView('icons')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'icons' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ImageIcon className="mr-2" size={18}/> Icon Management</button>
+                        <button onClick={() => setAdminView('pending')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'pending' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                            <UserX className="mr-2" size={18}/> Pending Enrollments {pendingEnrollments.length > 0 && <span className="ml-2 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">{pendingEnrollments.length}</span>}
+                        </button>
                         <button onClick={() => setAdminView('timeclocks')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'timeclocks' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Smartphone className="mr-2" size={18}/> Time Clock Devices</button>
                         <button onClick={() => setAdminView('waivers')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'waivers' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><FileSignature className="mr-2" size={18}/> Waiver Management</button>
                     </nav>
@@ -255,13 +277,15 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                             {stations.map(station => (
                                 <div key={station.id} className="bg-white rounded-lg shadow flex flex-col">
                                     <div className="p-4 border-b flex items-center space-x-3"><div className="bg-gray-100 p-2 rounded-full"><Icon name={station.icon} className="h-6 w-6 text-gray-600" /></div><div><h3 className="font-bold text-lg text-gray-800">{station.name}</h3><p className="text-xs text-gray-500">{classes.find(c => c.id === station.classId)?.name}</p></div></div>
-                                    <div className="p-3 bg-gray-50 border-t flex justify-end space-x-2"><button onClick={() => handleCopyStation(station)} className="p-2 text-gray-500 hover:text-accent hover:bg-indigo-50 rounded-md"><Copy size={18} /></button><button onClick={() => handleEditStation(station)} className="p-2 text-gray-500 hover:text-accent hover:bg-indigo-50 rounded-md"><Edit size={18} /></button><button onClick={() => handleDeleteStationClick(station.id, station.name)} className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md"><Trash2 size={18} /></button></div>
+                                    <div className="p-3 bg-gray-50 border-t flex justify-end space-x-2"><button onClick={() => handleCopyStation(station)} className="p-2 text-gray-500 hover:text-accent hover:bg-indigo-50 rounded-md"><Copy size={18} /></button><button onClick={() => handleEditStation(station)} className="p-2 text-gray-500 hover:text-accent hover:bg-indigo-50 rounded-md"><Edit className="h-5 w-5" /></button><button onClick={() => handleDeleteStationClick(station.id, station.name)} className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md"><Trash2 className="h-5 w-5" /></button></div>
                                 </div>
                             ))}
                         </div>
                     </>
                 )}
                 {adminView === 'icons' && <IconManagement icons={icons} setIcons={setIcons} />}
+                {/* NEW: Render PendingEnrollmentManagement component */}
+                {adminView === 'pending' && <PendingEnrollmentManagement pendingEnrollments={pendingEnrollments} allUsers={allUsers} classes={classes} />}
                 {adminView === 'timeclocks' && <TimeClockManagement timeClocks={timeClocks} onSave={handleSaveTimeClock} onDelete={handleDeleteTimeClock} />}
                 {adminView === 'waivers' && <WaiverManagement waivers={waivers} setConfirmAction={setConfirmAction} />}
             </div>

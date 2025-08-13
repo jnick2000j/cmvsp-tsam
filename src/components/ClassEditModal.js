@@ -5,6 +5,7 @@ import { db, functions } from '../firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
 import { appId, INSTRUCTOR_ROLES, SUPPORT_ROLES } from '../constants';
 import { PlusCircle, Trash2, ChevronLeft, Check } from 'lucide-react';
+import Icon from './Icon';
 
 const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -56,7 +57,6 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
 };
 
 
-// MODIFIED: Added `icons` to the component props
 const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser, waivers, branding, icons }) => {
     const [formData, setFormData] = useState({});
     const [numGroups, setNumGroups] = useState(1);
@@ -65,10 +65,10 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
 
     const allRoles = useMemo(() => ['Student', ...INSTRUCTOR_ROLES, ...SUPPORT_ROLES], []);
     
-    // MODIFIED: Added 'iconUrl' field
+    // MODIFIED: Added `prerequisites` to the initial form data
     const getInitialFormData = useCallback(() => ({
         name: '', 
-        iconUrl: '', // NEW iconUrl field
+        iconUrl: '', 
         startDate: '', 
         endDate: '', 
         hours: '', 
@@ -79,6 +79,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         studentGroups: {}, 
         requiredWaivers: [], 
         isPrerequisiteUploadRequired: false, 
+        prerequisites: [], // NEW: Array to hold prerequisite requirements
         isHidden: false, 
         visibleToRoles: [], 
         logoUrl: '', 
@@ -106,7 +107,16 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                     ...getInitialFormData(), 
                     ...classToEdit,
                 };
-                setFormData(data);
+                // MODIFIED: Normalize prerequisites to ensure they are objects with an ID
+                const normalizedPrerequisites = (data.prerequisites || []).map((prereq, index) => ({
+                    ...prereq,
+                    id: prereq.id || `prereq-${Date.now()}-${index}`
+                }));
+
+                setFormData({
+                    ...data,
+                    prerequisites: normalizedPrerequisites,
+                });
                 const maxGroup = Object.values(data.studentGroups || {}).reduce((max, num) => Math.max(max, num), 1);
                 setNumGroups(maxGroup);
                 fetchEnrolledStudents(classToEdit.id);
@@ -139,6 +149,25 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         });
     };
 
+    // NEW: Handlers for prerequisites
+    const handlePrereqChange = (index, field, value) => {
+        const newPrerequisites = [...(formData.prerequisites || [])];
+        newPrerequisites[index][field] = value;
+        setFormData({ ...formData, prerequisites: newPrerequisites });
+    };
+    
+    const addPrerequisite = () => {
+        setFormData(prev => ({
+            ...prev,
+            prerequisites: [...(prev.prerequisites || []), { id: Date.now().toString(), description: '', requiresUpload: false }]
+        }));
+    };
+
+    const removePrerequisite = (index) => {
+        const newPrerequisites = formData.prerequisites.filter((_, i) => i !== index);
+        setFormData({ ...formData, prerequisites: newPrerequisites });
+    };
+    
     const handleSupportChange = (index, field, value) => {
         const newNeeds = [...(formData.supportNeeds || [])];
         if (field === 'assignedUserId') {
@@ -256,7 +285,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                         <label className="block text-sm font-medium text-gray-700">Class Name</label>
                         <input name="name" value={formData.name || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
                     </div>
-                    {/* NEW: Field for selecting an icon */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Icon</label>
                         <select name="iconUrl" value={formData.iconUrl || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
@@ -332,6 +360,49 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                         </div>
                     )}
                     
+                    {/* NEW: Prerequisites Section */}
+                    <div>
+                        <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Prerequisites</h3>
+                        <p className="mt-1 text-sm text-gray-500">Define the requirements users must meet before enrolling.</p>
+                        <div className="mt-4 space-y-3">
+                            {(formData.prerequisites || []).map((prereq, index) => (
+                                <div key={prereq.id} className="flex items-center space-x-2 p-3 bg-gray-50 rounded-md">
+                                    <div className="flex-grow grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500">Description</label>
+                                            <input
+                                                type="text"
+                                                name="description"
+                                                value={prereq.description}
+                                                onChange={(e) => handlePrereqChange(index, 'description', e.target.value)}
+                                                className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm"
+                                                placeholder="e.g., Provide CPR Certification"
+                                            />
+                                        </div>
+                                        <div className="flex items-center mt-4">
+                                            <label className="inline-flex items-center text-sm font-medium text-gray-700">
+                                                <input
+                                                    type="checkbox"
+                                                    name="requiresUpload"
+                                                    checked={prereq.requiresUpload}
+                                                    onChange={(e) => handlePrereqChange(index, 'requiresUpload', e.target.checked)}
+                                                    className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                                                />
+                                                <span className="ml-2">Requires File Upload</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <button type="button" onClick={() => removePrerequisite(index)} className="p-2 text-red-500 hover:bg-red-100 rounded-md">
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
+                            ))}
+                            <button type="button" onClick={addPrerequisite} className="flex items-center text-primary-dark hover:text-primary-hover text-sm font-medium">
+                                <PlusCircle className="mr-2" size={18} /> Add Prerequisite
+                            </button>
+                        </div>
+                    </div>
+
                     <div>
                         <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Support Needs</h3>
                         <p className="mt-1 text-sm text-gray-500">Add instructors or other personnel to assist with this class.</p>

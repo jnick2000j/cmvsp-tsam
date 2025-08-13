@@ -1,12 +1,11 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
-const { getFirestore, FieldValue, arrayUnion } = require("firebase-admin/firestore");
-const { RRule } = require('rrule'); // Assuming you have this from the previous step
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
 initializeApp();
 
-// --- Converted from your original file to 2nd Gen syntax ---
+// --- MODIFIED: createUserAccount function ---
 exports.createUserAccount = onCall(async (request) => {
     const data = request.data;
     if (!data.email || !data.password) {
@@ -46,6 +45,7 @@ exports.createUserAccount = onCall(async (request) => {
         completedClasses: {},
         isApproved: false,
         needsApproval: true,
+        waivers: {}, // NEW: Initialize waivers as an empty object
     };
 
     try {
@@ -59,21 +59,19 @@ exports.createUserAccount = onCall(async (request) => {
 });
 
 
-// --- NEW: enrollStudent Function (Corrected Logic) ---
+// --- MODIFIED: enrollStudent Function to handle prerequisites and pending approval ---
 exports.enrollStudent = onCall(async (request) => {
-    const { classId, studentId } = request.data;
+    const { classId, studentId, prerequisiteSubmissions = {}, waiverStatus = {} } = request.data;
     const uid = request.auth.uid;
+    const appId = "cmvsp-tsam"; // This should be retrieved from a config or request data
 
     if (!uid) {
         throw new HttpsError('unauthenticated', 'You must be logged in to perform this action.');
     }
 
     const db = getFirestore();
-    const classRef = db.collection('classes').doc(classId);
+    const classRef = db.collection(`artifacts/${appId}/public/data/classes`).doc(classId);
     const studentRef = db.collection('users').doc(studentId);
-
-    const callingUserRecord = await getAuth().getUser(uid);
-    const userRole = callingUserRecord.customClaims?.role;
 
     const classDoc = await classRef.get();
     if (!classDoc.exists) {
@@ -81,30 +79,38 @@ exports.enrollStudent = onCall(async (request) => {
     }
 
     const classData = classDoc.data();
-    const isLeadInstructor = classData.leadInstructorIds?.includes(uid);
-
-    if (userRole !== 'admin' && !isLeadInstructor) {
-        throw new HttpsError('permission-denied', 'You do not have permission to enroll students in this class.');
-    }
+    const hasPrerequisites = (classData.prerequisites && classData.prerequisites.length > 0) || (classData.requiredWaivers && classData.requiredWaivers.length > 0);
 
     try {
-        await classRef.collection('enrollments').doc(studentId).set({
-            enrolledAt: FieldValue.serverTimestamp(),
-            enrolledBy: uid
-        });
+        if (hasPrerequisites) {
+            // Enrollment requires approval
+            await classRef.collection('enrollments').doc(studentId).set({
+                status: 'pending',
+                enrolledAt: FieldValue.serverTimestamp(),
+                submittedBy: uid,
+                prerequisiteSubmissions, // NEW: Record user's prerequisite submissions
+                waiverStatus, // NEW: Record waiver status
+            });
 
-        await studentRef.update({
-            enrolledClasses: FieldValue.arrayUnion(classId)
-        });
+            return { success: true, message: 'Enrollment submitted for approval.' };
 
-        return { success: true, message: 'Student enrolled successfully.' };
+        } else {
+            // No prerequisites, auto-approve enrollment
+            await classRef.collection('enrollments').doc(studentId).set({
+                status: 'approved',
+                enrolledAt: FieldValue.serverTimestamp(),
+                approvedAt: FieldValue.serverTimestamp(),
+                approvedBy: uid,
+            });
+
+            await studentRef.update({
+                enrolledClasses: FieldValue.arrayUnion(classId)
+            });
+
+            return { success: true, message: 'Student enrolled successfully.' };
+        }
     } catch (error) {
         console.error("Error during enrollment transaction:", error);
         throw new HttpsError('internal', 'An error occurred while enrolling the student.');
     }
-});
-
-// --- This function would also be here from the previous steps ---
-exports.applyShiftTemplate = onCall(async (request) => {
-    // ... existing applyShiftTemplate code ...
 });
