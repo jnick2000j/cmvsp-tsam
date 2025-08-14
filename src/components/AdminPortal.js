@@ -7,7 +7,6 @@ import { INSTRUCTOR_ROLES, appId } from '../constants';
 import UserEditModal from './UserEditModal';
 import StationEditModal from './StationEditModal';
 import ClassEditModal from './ClassEditModal';
-import WaiverManagement from './WaiverManagement';
 import TimeClockManagement from './TimeClockManagement';
 import IconManagement from './IconManagement'; 
 import PendingEnrollmentManagement from './PendingEnrollmentManagement'; // NEW: Import PendingEnrollmentManagement component
@@ -184,7 +183,8 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
         <>
             <UserEditModal isOpen={isUserModalOpen} onClose={handleCloseUserModal} userToEdit={editingUser} onSave={() => {}} />
             <StationEditModal isOpen={isStationModalOpen} onClose={handleCloseStationModal} stationToEdit={editingStation} onSave={() => {}} classes={classes} allUsers={allUsers} icons={icons} />
-            <ClassEditModal isOpen={isClassModalOpen} onClose={handleCloseClassModal} classToEdit={editingClass} onSave={() => {}} instructors={instructors} allUsers={allUsers} currentUser={currentUser} waivers={waivers} branding={branding} icons={icons} />
+            {/* MODIFIED: `waivers` prop has been removed as it is no longer relevant for ClassEditModal */}
+            <ClassEditModal isOpen={isClassModalOpen} onClose={handleCloseClassModal} classToEdit={editingClass} onSave={() => {}} instructors={instructors} allUsers={allUsers} currentUser={currentUser} branding={branding} icons={icons} />
 
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="border-b border-gray-200 mb-6">
@@ -197,7 +197,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                             <UserX className="mr-2" size={18}/> Pending Enrollments {pendingEnrollments.length > 0 && <span className="ml-2 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">{pendingEnrollments.length}</span>}
                         </button>
                         <button onClick={() => setAdminView('timeclocks')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'timeclocks' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Smartphone className="mr-2" size={18}/> Time Clock Devices</button>
-                        <button onClick={() => setAdminView('waivers')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'waivers' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><FileSignature className="mr-2" size={18}/> Waiver Management</button>
+                        {/* DELETED: Waiver Management Tab */}
                     </nav>
                 </div>
 
@@ -263,6 +263,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                 {adminView === 'classes' && (
                     <>
                         <div className="sm:flex sm:items-center sm:justify-between"><div><h2 className="text-2xl font-bold text-gray-900">Classes</h2><p className="mt-1 text-sm text-gray-500">Manage the classes that contain stations.</p></div><div className="mt-4 sm:mt-0"><button onClick={handleAddClass} className="w-full flex items-center justify-center px-4 py-2 bg-primary text-white rounded-md shadow-sm hover:bg-primary-hover"><PlusCircle className="h-5 w-5 mr-2" /> Add New Class</button></div></div>
+                        {classes.length === 0 && <p className="mt-4 text-yellow-700 bg-yellow-50 p-3 rounded-md">Please add a Class before adding stations.</p>}
                         <div className="mt-6 flow-root"><div className="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8"><div className="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8"><div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
                             <table className="min-w-full divide-y divide-gray-300"><thead className="bg-gray-50"><tr><th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Class Name</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Status</th><th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th></tr></thead>
                             <tbody className="divide-y divide-gray-200 bg-white">{classes.map((cls) => (<tr key={cls.id}><td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{cls.name}</td><td className="px-3 py-4 text-sm text-gray-500">{cls.isCompleted ? <span className="inline-flex items-center rounded-full bg-gray-100 text-gray-800 px-2.5 py-0.5 text-xs font-medium">Completed</span> : <span className="inline-flex items-center rounded-full bg-green-100 text-green-800 px-2.5 py-0.5 text-xs font-medium">Active</span>}</td><td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6"><button onClick={() => handleCopyClass(cls)} className="text-gray-500 hover:text-accent mr-4"><Copy className="h-5 w-5" /></button><button onClick={() => handleEditClass(cls)} className="text-accent hover:text-accent-hover mr-4"><Edit className="h-5 w-5" /></button><button onClick={() => handleDeleteClassClick(cls.id, cls.name)} className="text-red-600 hover:text-red-900"><Trash2 className="h-5 w-5" /></button></td></tr>))}</tbody></table>
@@ -287,7 +288,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                 {/* NEW: Render PendingEnrollmentManagement component */}
                 {adminView === 'pending' && <PendingEnrollmentManagement pendingEnrollments={pendingEnrollments} allUsers={allUsers} classes={classes} />}
                 {adminView === 'timeclocks' && <TimeClockManagement timeClocks={timeClocks} onSave={handleSaveTimeClock} onDelete={handleDeleteTimeClock} />}
-                {adminView === 'waivers' && <WaiverManagement waivers={waivers} setConfirmAction={setConfirmAction} />}
+                {/* DELETED: WaiverManagement Component */}
             </div>
         </>
     );
