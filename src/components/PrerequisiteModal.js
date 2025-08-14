@@ -1,14 +1,16 @@
 // src/components/PrerequisiteModal.js
 import React, { useState } from 'react';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db } from '../firebaseConfig';
+import { db, functions } from '../firebaseConfig'; // Import functions
+import { httpsCallable } from 'firebase/functions'; // Import httpsCallable
 import { Check, UploadCloud } from 'lucide-react';
+import { appId } from '../constants';
 
 const PrerequisiteModal = ({ isOpen, onClose, classToEnroll, user }) => {
     const [prereqData, setPrereqData] = useState({});
     const [files, setFiles] = useState({});
     const [isLoading, setIsLoading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState({});
+    const [error, setError] = useState('');
 
     if (!isOpen || !classToEnroll) return null;
 
@@ -27,6 +29,18 @@ const PrerequisiteModal = ({ isOpen, onClose, classToEnroll, user }) => {
     };
 
     const handleSubmit = async () => {
+        setError('');
+        
+        // Validation check for required file uploads
+        const missingFiles = classToEnroll.prerequisites
+            .filter(p => p.requiresUpload && !files[p.id])
+            .map(p => p.description);
+
+        if (missingFiles.length > 0) {
+            setError(`Please upload a file for the following prerequisite(s): ${missingFiles.join(', ')}`);
+            return;
+        }
+
         setIsLoading(true);
         try {
             const submissions = {};
@@ -41,21 +55,25 @@ const PrerequisiteModal = ({ isOpen, onClose, classToEnroll, user }) => {
                     await uploadTask;
                     const url = await getDownloadURL(storageRef);
                     submissions[prereq.id] = { url, fileName: file.name, description: prereq.description };
-                } else {
+                } else if (!prereq.requiresUpload) {
                     submissions[prereq.id] = { text: prereqData[prereq.id]?.text || '', description: prereq.description };
                 }
             }
 
-            // At this point, we would call the cloud function to create the pending enrollment
-            // with these submissions.
-            // For now, we'll just log and close the modal.
-            console.log("Submitting prerequisites:", submissions);
-            alert("Prerequisites submitted for approval.");
-            onClose();
+            // Call the enrollStudent Cloud Function with the submissions
+            const enrollStudent = httpsCallable(functions, 'enrollStudent');
+            const result = await enrollStudent({
+                classId: classToEnroll.id,
+                studentId: user.uid,
+                prerequisiteSubmissions: submissions
+            });
 
+            console.log("Enrollment result:", result.data);
+            onClose();
+            
         } catch (error) {
             console.error("Failed to submit prerequisites:", error);
-            alert("An error occurred during submission. Please try again.");
+            setError("An error occurred during submission. Please try again.");
         } finally {
             setIsLoading(false);
         }
@@ -69,8 +87,9 @@ const PrerequisiteModal = ({ isOpen, onClose, classToEnroll, user }) => {
                 </div>
                 <div className="p-6 space-y-4 overflow-y-auto">
                     <p className="text-sm text-gray-600">
-                        This class requires you to submit the following prerequisites for approval. Once submitted, your enrollment will be in a "Pending Approval" state until an administrator reviews them.
+                        This class requires you to submit the following prerequisites.
                     </p>
+                    {error && <p className="text-sm text-red-500 bg-red-50 p-3 rounded-md">{error}</p>}
                     <ul className="space-y-4">
                         {classToEnroll.prerequisites.map(prereq => (
                             <li key={prereq.id} className="p-4 border rounded-md bg-gray-50">
@@ -115,7 +134,7 @@ const PrerequisiteModal = ({ isOpen, onClose, classToEnroll, user }) => {
                         disabled={isLoading}
                         className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:bg-gray-400"
                     >
-                        {isLoading ? 'Submitting...' : 'Submit for Approval'}
+                        {isLoading ? 'Submitting...' : 'Submit Prerequisites'}
                     </button>
                 </div>
             </div>

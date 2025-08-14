@@ -65,7 +65,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
 
     const allRoles = useMemo(() => ['Student', ...INSTRUCTOR_ROLES, ...SUPPORT_ROLES], []);
     
-    // MODIFIED: Removed `isPrerequisiteUploadRequired` and `requiredWaivers`
+    // MODIFIED: Removed `isPrerequisiteUploadRequired` and `requiredWaivers` from the initial form data state.
     const getInitialFormData = useCallback(() => ({
         name: '', 
         iconUrl: '', 
@@ -135,6 +135,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
     const handleRoleVisibilityChange = (selectedRoles) => {
         setFormData({ ...formData, visibleToRoles: selectedRoles });
     };
+    // DELETED: handleWaiverChange function
 
     const handlePrereqChange = (index, field, value) => {
         const newPrerequisites = [...(formData.prerequisites || [])];
@@ -223,7 +224,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
             dataToSave.completedDate = new Date();
         }
 
-        // MODIFIED: Removed requiredWaivers
+        // DELETED: Removed requiredWaivers
         delete dataToSave.requiredWaivers;
 
         try {
@@ -236,7 +237,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
             onClose();
         } catch (err) { console.error(err); }
     };
-
+    
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
             <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
@@ -332,6 +333,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                             </button>
                         </div>
                     </div>
+                    {/* DELETED: Waiver Management Section */}
 
                     <div>
                         <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Support Needs</h3>

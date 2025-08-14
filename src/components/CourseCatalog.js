@@ -2,11 +2,11 @@
 import React, { useState, useMemo } from 'react';
 import { Calendar, MapPin, Hourglass, Search } from 'lucide-react';
 import Icon from './Icon';
-import PrerequisiteModal from './PrerequisiteModal'; // NEW: Import the prerequisite modal component
+import PrerequisiteModal from './PrerequisiteModal'; 
 
-const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError, logoUrl }) => {
+const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError, onCancelEnrollment, branding }) => {
     const [searchTerm, setSearchTerm] = useState('');
-    const [prerequisiteClass, setPrerequisiteClass] = useState(null); // NEW: State to manage prerequisite modal
+    const [prerequisiteClass, setPrerequisiteClass] = useState(null); 
 
     const getLeadInstructorName = (instructorId) => {
         const instructor = allUsers.find(u => u.id === instructorId);
@@ -16,15 +16,13 @@ const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError
     const visibleClasses = useMemo(() => {
         return classes
             .filter(course => {
-                // Filter out hidden or completed classes
                 if (course.isHidden || course.isCompleted) {
                     return false;
                 }
-                // Filter by role visibility
                 if (course.visibleToRoles && course.visibleToRoles.length > 0) {
                     return course.visibleToRoles.includes(user.role);
                 }
-                return true; // Show if no roles are specified
+                return true;
             })
             .filter(course =>
                 course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -33,18 +31,17 @@ const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError
     }, [classes, searchTerm, user, allUsers, getLeadInstructorName]);
 
     const handleEnrollClick = (course) => {
-        // NEW: Check for prerequisites and open modal if they exist
         if (course.prerequisites && course.prerequisites.length > 0) {
             setPrerequisiteClass(course);
         } else {
-            // No prerequisites, proceed with original enrollment logic
             onEnrollClick(course.id);
         }
     };
+    
+    const isEnrolled = (courseId) => user.enrolledClasses?.includes(courseId);
 
     return (
         <div className="p-4 sm:p-6 lg:p-8 space-y-6">
-            {/* NEW: Prerequisite Modal */}
             <PrerequisiteModal
                 isOpen={!!prerequisiteClass}
                 onClose={() => setPrerequisiteClass(null)}
@@ -54,7 +51,7 @@ const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError
 
             <div className="sm:flex sm:items-center sm:justify-between">
                 <div className="flex items-center space-x-4">
-                    {logoUrl && <img src={logoUrl} alt="Catalog Logo" className="h-12" />}
+                    {branding.siteLogo && <img src={branding.siteLogo} alt="Catalog Logo" className="h-12" />}
                     <div>
                         <h2 className="text-2xl font-bold text-gray-900">Course Catalog</h2>
                         <p className="mt-1 text-sm text-gray-500">Browse and enroll in available courses.</p>
@@ -75,8 +72,10 @@ const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {visibleClasses.map(course => {
-                    const isEnrolled = user.enrolledClasses?.includes(course.id);
+                    const isEnrolledInCourse = isEnrolled(course.id);
                     const isPast = new Date(course.endDate) < new Date();
+                    const canCancel = (new Date(course.startDate).getTime() - new Date().getTime()) / (1000 * 60 * 60) > 24;
+
                     return (
                         <div key={course.id} className={`bg-white rounded-xl shadow-lg overflow-hidden flex flex-col ${isPast ? 'opacity-60' : ''}`}>
                             <div className="p-5 border-b">
@@ -102,13 +101,23 @@ const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError
                                 <div className="flex items-center text-gray-500"><Hourglass className="h-4 w-4 mr-2" /><span>{course.hours} hours</span></div>
                             </div>
                             <div className="p-4 bg-gray-50 border-t">
-                                <button
-                                    onClick={() => handleEnrollClick(course)}
-                                    disabled={isEnrolled || isPast}
-                                    className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-green-600 disabled:cursor-not-allowed"
-                                >
-                                    {isEnrolled ? 'Enrolled' : isPast ? 'Closed' : 'Enroll Now'}
-                                </button>
+                                {isEnrolledInCourse ? (
+                                     <button
+                                        onClick={() => onCancelEnrollment(course.id)}
+                                        disabled={!canCancel}
+                                        className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                    >
+                                        Unenroll
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={() => handleEnrollClick(course)}
+                                        disabled={isPast}
+                                        className="w-full flex items-center justify-center px-4 py-2.5 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                    >
+                                        {isPast ? 'Closed' : 'Enroll Now'}
+                                    </button>
+                                )}
                                 {enrollmentError && enrollmentError.classId === course.id && (
                                     <p className="text-xs text-red-600 mt-2 text-center">{enrollmentError.message}</p>
                                 )}

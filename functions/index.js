@@ -45,6 +45,7 @@ exports.createUserAccount = onCall(async (request) => {
         completedClasses: {},
         isApproved: false,
         needsApproval: true,
+        waivers: {},
     };
 
     try {
@@ -58,9 +59,9 @@ exports.createUserAccount = onCall(async (request) => {
 });
 
 
-// --- MODIFIED: enrollStudent Function to handle prerequisites and pending approval ---
+// --- MODIFIED: enrollStudent Function to immediately approve students with prerequisites ---
 exports.enrollStudent = onCall(async (request) => {
-    const { classId, studentId, prerequisiteSubmissions = {} } = request.data;
+    const { classId, studentId, prerequisiteSubmissions = {}, waiverStatus = {} } = request.data;
     const uid = request.auth.uid;
     const appId = "cmvsp-tsam";
 
@@ -71,97 +72,40 @@ exports.enrollStudent = onCall(async (request) => {
     const db = getFirestore();
     const classRef = db.collection(`artifacts/${appId}/public/data/classes`).doc(classId);
     const studentRef = db.collection('users').doc(studentId);
+    const enrollmentRef = classRef.collection('enrollments').doc(studentId);
 
     const classDoc = await classRef.get();
     if (!classDoc.exists) {
         throw new HttpsError('not-found', 'The specified class could not be found.');
     }
 
-    const classData = classDoc.data();
-    const hasPrerequisites = (classData.prerequisites && classData.prerequisites.length > 0)
+    // New: Directly check the existing enrollment for idempotency
+    const existingEnrollment = await enrollmentRef.get();
+    if (existingEnrollment.exists && existingEnrollment.data().status === 'approved') {
+        return { success: true, message: 'Student is already enrolled.' };
+    }
 
     try {
-        if (hasPrerequisites) {
-            await classRef.collection('enrollments').doc(studentId).set({
-                status: 'pending',
-                enrolledAt: FieldValue.serverTimestamp(),
-                submittedBy: uid,
-                prerequisiteSubmissions,
-            });
+        await enrollmentRef.set({
+            status: 'approved',
+            enrolledAt: FieldValue.serverTimestamp(),
+            approvedAt: FieldValue.serverTimestamp(),
+            approvedBy: uid, // Auto-approved by the student themselves
+            prerequisiteSubmissions,
+            waiverStatus,
+        });
 
-            return { success: true, message: 'Enrollment submitted for approval.' };
+        await studentRef.update({
+            enrolledClasses: FieldValue.arrayUnion(classId)
+        });
 
-        } else {
-            await classRef.collection('enrollments').doc(studentId).set({
-                status: 'approved',
-                enrolledAt: FieldValue.serverTimestamp(),
-                approvedAt: FieldValue.serverTimestamp(),
-                approvedBy: uid,
-            });
+        return { success: true, message: 'Student enrolled successfully.' };
 
-            await studentRef.update({
-                enrolledClasses: FieldValue.arrayUnion(classId)
-            });
-
-            return { success: true, message: 'Student enrolled successfully.' };
-        }
     } catch (error) {
         console.error("Error during enrollment transaction:", error);
         throw new HttpsError('internal', 'An error occurred while enrolling the student.');
     }
 });
 
-// --- NEW: processEnrollmentApproval function ---
-exports.processEnrollmentApproval = onCall(async (request) => {
-    const { classId, studentId, action } = request.data;
-    const uid = request.auth.uid;
-    const appId = "cmvsp-tsam";
-
-    if (!uid) {
-        throw new HttpsError('unauthenticated', 'You must be logged in to perform this action.');
-    }
-
-    const db = getFirestore();
-    const classRef = db.collection(`artifacts/${appId}/public/data/classes`).doc(classId);
-    const enrollmentRef = classRef.collection('enrollments').doc(studentId);
-    const userRef = db.collection('users').doc(studentId);
-
-    const enrollmentDoc = await enrollmentRef.get();
-    if (!enrollmentDoc.exists || enrollmentDoc.data().status !== 'pending') {
-        throw new HttpsError('failed-precondition', 'Enrollment is not in a pending state.');
-    }
-
-    const classDoc = await classRef.get();
-    const classData = classDoc.data();
-    const isLeadInstructor = classData.leadInstructorId === uid;
-    const callingUserDoc = await db.collection('users').doc(uid).get();
-    const isAdmin = callingUserDoc.data()?.isAdmin;
-
-    if (!isAdmin && !isLeadInstructor) {
-        throw new HttpsError('permission-denied', 'You do not have permission to approve or deny this enrollment.');
-    }
-
-    if (action === 'approve') {
-        await enrollmentRef.update({
-            status: 'approved',
-            approvedAt: FieldValue.serverTimestamp(),
-            approvedBy: uid,
-        });
-
-        await userRef.update({
-            enrolledClasses: FieldValue.arrayUnion(classId),
-        });
-
-        return { success: true, message: 'Enrollment approved successfully.' };
-    } else if (action === 'deny') {
-        await enrollmentRef.update({
-            status: 'denied',
-            deniedAt: FieldValue.serverTimestamp(),
-            deniedBy: uid,
-        });
-        
-        return { success: true, message: 'Enrollment denied successfully.' };
-    } else {
-        throw new HttpsError('invalid-argument', 'Invalid action specified.');
-    }
-});
+// --- DELETED: The 'processEnrollmentApproval' function is no longer needed.
+// This is because enrollment is now automatically approved.
