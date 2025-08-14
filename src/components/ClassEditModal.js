@@ -57,7 +57,7 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
 };
 
 
-const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser, waivers, branding, icons }) => {
+const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser, branding, icons }) => {
     const [formData, setFormData] = useState({});
     const [numGroups, setNumGroups] = useState(1);
     const [enrolledStudentsList, setEnrolledStudentsList] = useState([]);
@@ -65,7 +65,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
 
     const allRoles = useMemo(() => ['Student', ...INSTRUCTOR_ROLES, ...SUPPORT_ROLES], []);
     
-    // MODIFIED: Removed `isPrerequisiteUploadRequired`
+    // MODIFIED: Removed `isPrerequisiteUploadRequired` and `requiredWaivers`
     const getInitialFormData = useCallback(() => ({
         name: '', 
         iconUrl: '', 
@@ -77,7 +77,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         leadInstructorId: currentUser?.uid || '', 
         supportNeeds: [], 
         studentGroups: {}, 
-        requiredWaivers: [], 
         prerequisites: [],
         isHidden: false, 
         visibleToRoles: [], 
@@ -135,16 +134,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
     
     const handleRoleVisibilityChange = (selectedRoles) => {
         setFormData({ ...formData, visibleToRoles: selectedRoles });
-    };
-
-    const handleWaiverChange = (waiverId) => {
-        setFormData(prev => {
-            const currentWaivers = prev.requiredWaivers || [];
-            const newWaivers = currentWaivers.includes(waiverId)
-                ? currentWaivers.filter(id => id !== waiverId)
-                : [...currentWaivers, waiverId];
-            return { ...prev, requiredWaivers: newWaivers };
-        });
     };
 
     const handlePrereqChange = (index, field, value) => {
@@ -225,7 +214,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         }
     };
 
-    // REMOVED: handleManualEnroll function entirely
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!formData.name) return;
@@ -234,6 +222,9 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         if (dataToSave.isCompleted && !dataToSave.completedDate) {
             dataToSave.completedDate = new Date();
         }
+
+        // MODIFIED: Removed requiredWaivers
+        delete dataToSave.requiredWaivers;
 
         try {
             if (classToEdit) {
@@ -246,8 +237,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         } catch (err) { console.error(err); }
     };
 
-    // REMOVED: canManageEnrollment variable
-    
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
             <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
@@ -363,17 +352,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                         </div>
                     </div>
                     
-                    <div className="mt-4 border-t pt-4">
-                        <label className="block text-sm font-medium text-gray-700">Required Waivers</label>
-                        <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {waivers.map(waiver => (
-                                <label key={waiver.id} className="inline-flex items-center">
-                                    <input type="checkbox" name="waivers" checked={(formData.requiredWaivers || []).includes(waiver.id)} onChange={() => handleWaiverChange(waiver.id)} className="rounded border-gray-300 text-indigo-600 shadow-sm" />
-                                    <span className="ml-2 text-sm">{waiver.name}</span>
-                                </label>
-                            ))}
-                        </div>
-                    </div>
                     <div className="mt-4 border-t pt-4">
                         <label className="block text-sm font-medium text-gray-700">Visible To Roles</label>
                         <MultiSelectDropdown 

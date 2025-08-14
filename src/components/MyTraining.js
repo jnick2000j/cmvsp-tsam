@@ -17,7 +17,7 @@ const EnrolledCourses = ({
             const canCancel = (new Date(course.startDate).getTime() - new Date().getTime()) / (1000 * 60 * 60) > 24;
             
             // NEW: Determine the enrollment status
-            const enrollmentStatus = course.enrollmentStatus; // Assuming this is passed from parent component
+            const enrollmentStatus = 'approved'; 
 
             return (
               <div key={course.id} className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col">
@@ -39,7 +39,7 @@ const EnrolledCourses = ({
                 </div>
                 <div className="p-4 bg-gray-50 border-t space-y-2">
                     {/* MODIFIED: Conditional buttons based on enrollment status */}
-                    {enrollmentStatus === 'approved' && (
+                    
                         <>
                             <button
                                 onClick={() => setActiveClassId(course.id)}
@@ -55,28 +55,7 @@ const EnrolledCourses = ({
                                 Cancel Enrollment
                             </button>
                         </>
-                    )}
-
-                    {enrollmentStatus === 'pending' && (
-                        <>
-                            <p className="w-full text-center text-sm font-medium text-yellow-600 bg-yellow-50 p-2 rounded-md">
-                                Pending Approval
-                            </p>
-                            <button
-                                onClick={() => handleCancelEnrollment(course.id)}
-                                disabled={!canCancel}
-                                className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-                            >
-                                Cancel Enrollment
-                            </button>
-                        </>
-                    )}
-
-                    {enrollmentStatus === 'denied' && (
-                        <p className="w-full text-center text-sm font-medium text-red-600 bg-red-50 p-2 rounded-md">
-                            Enrollment Denied
-                        </p>
-                    )}
+                    
                 </div>
               </div>
             );

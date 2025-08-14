@@ -45,7 +45,6 @@ exports.createUserAccount = onCall(async (request) => {
         completedClasses: {},
         isApproved: false,
         needsApproval: true,
-        waivers: {},
     };
 
     try {
@@ -61,7 +60,7 @@ exports.createUserAccount = onCall(async (request) => {
 
 // --- MODIFIED: enrollStudent Function to handle prerequisites and pending approval ---
 exports.enrollStudent = onCall(async (request) => {
-    const { classId, studentId, prerequisiteSubmissions = {}, waiverStatus = {} } = request.data;
+    const { classId, studentId, prerequisiteSubmissions = {} } = request.data;
     const uid = request.auth.uid;
     const appId = "cmvsp-tsam";
 
@@ -79,7 +78,7 @@ exports.enrollStudent = onCall(async (request) => {
     }
 
     const classData = classDoc.data();
-    const hasPrerequisites = (classData.prerequisites && classData.prerequisites.length > 0) || (classData.requiredWaivers && classData.requiredWaivers.length > 0);
+    const hasPrerequisites = (classData.prerequisites && classData.prerequisites.length > 0)
 
     try {
         if (hasPrerequisites) {
@@ -88,7 +87,6 @@ exports.enrollStudent = onCall(async (request) => {
                 enrolledAt: FieldValue.serverTimestamp(),
                 submittedBy: uid,
                 prerequisiteSubmissions,
-                waiverStatus,
             });
 
             return { success: true, message: 'Enrollment submitted for approval.' };

@@ -26,7 +26,7 @@ service cloud.firestore {
     // Add these new rules at the same level as the 'classes' or 'stations' rules
     match /artifacts/{appId}/public/data/icons/{iconId} {
       allow read: if request.auth != null;
-    // Only admins can create, update, or delete icons
+      // Only admins can create, update, or delete icons
     allow create, update, delete: if isAdmin();
     }
 
@@ -51,17 +51,6 @@ service cloud.firestore {
       allow read: if request.auth != null && isApproved();
       // Only admins can create, update, or delete classes
       allow create, update, delete: if isAdmin();
-
-      // Rules for the enrollments subcollection
-      match /enrollments/{userId} {
-        // Allow creation only via the Cloud Function (any authenticated user can trigger it)
-        allow create: if request.auth != null;
-        // Allow admins or the lead instructor to manage enrollments
-        allow read, update, delete: if request.auth != null && (
-          isAdmin() ||
-          get(/databases/$(database)/documents/classes/$(classId)).data.leadInstructor == request.auth.uid
-        );
-      }
     }
 
     // --- Default catch-all rule from your original file ---
