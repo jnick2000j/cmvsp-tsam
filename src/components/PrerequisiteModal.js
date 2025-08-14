@@ -30,6 +30,12 @@ const PrerequisiteModal = ({ isOpen, onClose, classToEnroll, user }) => {
     const handleSubmit = async () => {
         setError('');
         
+        // ADDED: Validation check for classId and userId
+        if (!classToEnroll?.id || !user?.uid) {
+            setError("Enrollment information is missing. Please close and reopen the enrollment process.");
+            return;
+        }
+
         // Validation check for required file uploads
         const missingFiles = classToEnroll.prerequisites
             .filter(p => p.requiresUpload && !files[p.id])
@@ -49,7 +55,6 @@ const PrerequisiteModal = ({ isOpen, onClose, classToEnroll, user }) => {
                     const storage = getStorage();
                     const storageRef = ref(storage, `prerequisites/${user.uid}/${classToEnroll.id}/${prereq.id}_${file.name}`);
                     
-                    // FIXED: Await the uploadBytes function
                     await uploadBytes(storageRef, file);
                     const url = await getDownloadURL(storageRef);
                     submissions[prereq.id] = { url, fileName: file.name, description: prereq.description };
@@ -58,7 +63,6 @@ const PrerequisiteModal = ({ isOpen, onClose, classToEnroll, user }) => {
                 }
             }
 
-            // Call the enrollStudent Cloud Function with the submissions
             const enrollStudent = httpsCallable(functions, 'enrollStudent');
             const result = await enrollStudent({
                 classId: classToEnroll.id,
