@@ -45,7 +45,6 @@ exports.createUserAccount = onCall(async (request) => {
         completedClasses: {},
         isApproved: false,
         needsApproval: true,
-        waivers: {},
     };
 
     try {
@@ -61,7 +60,7 @@ exports.createUserAccount = onCall(async (request) => {
 
 // --- MODIFIED: enrollStudent Function to immediately approve students with prerequisites ---
 exports.enrollStudent = onCall(async (request) => {
-    const { classId, studentId, prerequisiteSubmissions = {}, waiverStatus = {} } = request.data;
+    const { classId, studentId, prerequisiteSubmissions = {} } = request.data;
     const uid = request.auth.uid;
     const appId = "cmvsp-tsam";
 
@@ -79,7 +78,6 @@ exports.enrollStudent = onCall(async (request) => {
         throw new HttpsError('not-found', 'The specified class could not be found.');
     }
 
-    // New: Directly check the existing enrollment for idempotency
     const existingEnrollment = await enrollmentRef.get();
     if (existingEnrollment.exists && existingEnrollment.data().status === 'approved') {
         return { success: true, message: 'Student is already enrolled.' };
@@ -90,9 +88,8 @@ exports.enrollStudent = onCall(async (request) => {
             status: 'approved',
             enrolledAt: FieldValue.serverTimestamp(),
             approvedAt: FieldValue.serverTimestamp(),
-            approvedBy: uid, // Auto-approved by the student themselves
+            approvedBy: uid,
             prerequisiteSubmissions,
-            waiverStatus,
         });
 
         await studentRef.update({
@@ -106,6 +103,3 @@ exports.enrollStudent = onCall(async (request) => {
         throw new HttpsError('internal', 'An error occurred while enrolling the student.');
     }
 });
-
-// --- DELETED: The 'processEnrollmentApproval' function is no longer needed.
-// This is because enrollment is now automatically approved.

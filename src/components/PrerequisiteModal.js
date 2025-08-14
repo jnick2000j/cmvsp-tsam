@@ -1,10 +1,9 @@
 // src/components/PrerequisiteModal.js
 import React, { useState } from 'react';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, functions } from '../firebaseConfig'; // Import functions
+import { functions } from '../firebaseConfig'; // Import functions
 import { httpsCallable } from 'firebase/functions'; // Import httpsCallable
 import { Check, UploadCloud } from 'lucide-react';
-import { appId } from '../constants';
 
 const PrerequisiteModal = ({ isOpen, onClose, classToEnroll, user }) => {
     const [prereqData, setPrereqData] = useState({});
@@ -50,9 +49,8 @@ const PrerequisiteModal = ({ isOpen, onClose, classToEnroll, user }) => {
                     const storage = getStorage();
                     const storageRef = ref(storage, `prerequisites/${user.uid}/${classToEnroll.id}/${prereq.id}_${file.name}`);
                     
-                    const uploadTask = uploadBytes(storageRef, file);
-
-                    await uploadTask;
+                    // FIXED: Await the uploadBytes function
+                    await uploadBytes(storageRef, file);
                     const url = await getDownloadURL(storageRef);
                     submissions[prereq.id] = { url, fileName: file.name, description: prereq.description };
                 } else if (!prereq.requiresUpload) {
