@@ -370,6 +370,7 @@ export default function App() {
 
     const isInstructor = user.isAdmin || INSTRUCTOR_ROLES.includes(user.role);
     const isPatrolLeadership = user.isAdmin || PATROL_LEADER_ROLES.includes(user.ability);
+    const isStudent = user.role === 'Student'; // ADDED: Definition for isStudent
     const hasSchedulingAccess = user.isAdmin || user.allowScheduling;
 
     const renderContent = () => {
@@ -384,7 +385,6 @@ export default function App() {
             case 'myTraining':
                 return <MyTraining {...{ user, enrolledClassesDetails, dailyCheckIns, setActiveClassId, handlePrerequisiteCheckin, handleCancelEnrollment, allUsers, classes, stations, checkIns, generateClassPdf }} />;
             case 'attendance': return <AttendanceTabs {...{ user, allUsers, classes, stations, attendanceRecords, subView, setSubView }} />;
-            // MODIFIED: Removed the waivers prop from CourseCatalog
             case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: handleEnroll, enrollmentError, onCancelEnrollment: handleCancelEnrollment, branding }} />;
             case 'profile': return <ProfileManagement {...{ user, setConfirmAction }} />;
             
