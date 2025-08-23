@@ -1,12 +1,12 @@
-// src/components/StationEditModal.js
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { doc, updateDoc, addDoc, collection } from 'firebase/firestore';
-import { db } from '../firebaseConfig';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { db, storage } from '../firebaseConfig';
 import { appId, INSTRUCTOR_ROLES } from '../constants';
-import { PlusCircle, Trash2, ChevronLeft, Check } from 'lucide-react';
+import { PlusCircle, Trash2, ChevronLeft, Check, X, Plus, Paperclip, Video, AlertTriangle } from 'lucide-react';
+import Icon from './Icon';
 
-// MultiSelectDropdown needs to be in its own file or defined here if only used here.
-// For simplicity in this refactoring step, we'll define it here.
+// MultiSelectDropdown for assigning instructors to skills
 const MultiSelectDropdown = ({ options, selected, onChange }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
@@ -56,46 +56,45 @@ const MultiSelectDropdown = ({ options, selected, onChange }) => {
     );
 };
 
-
-// MODIFIED: Added `icons` to the component props
 const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, allUsers, icons }) => {
-    // MODIFIED: Changed `icon` to `iconUrl` and set default to an empty string.
-    const [formData, setFormData] = useState({ name: '', iconUrl: '', skills: [], classId: '', date: '', startTime: '', endTime: '', hours: '', location: '', summary: '', supportNeeds: [], leadInstructorId: '', skillAssignments: {} });
+    const [formData, setFormData] = useState({ name: '', iconUrl: '', skills: [], classId: '', date: '', startTime: '', endTime: '', hours: '', location: '', summary: '', supportNeeds: [], leadInstructorId: '', skillAssignments: {}, assets: [] });
     const [error, setError] = useState('');
+    const [isUploading, setIsUploading] = useState(false);
 
     const instructors = useMemo(() => allUsers.filter(u => u.isAdmin || INSTRUCTOR_ROLES.includes(u.role)), [allUsers]);
 
     useEffect(() => {
         if (isOpen) {
             if (stationToEdit) {
-                // Normalize skills to ensure they are objects with an id and text
-                const normalizedSkills = (stationToEdit.skills || []).map((skill, index) => {
-                    if (typeof skill === 'string') {
-                        return { id: `skill-${Date.now()}-${index}`, text: skill };
-                    }
-                    return {
-                        ...skill,
-                        id: skill.id || `skill-${Date.now()}-${index}`
-                    };
-                });
+                const normalizedSkills = (stationToEdit.skills || []).map((skill, index) => 
+                    typeof skill === 'string' 
+                        ? { id: `skill-${Date.now()}-${index}`, text: skill }
+                        : { ...skill, id: skill.id || `skill-${Date.now()}-${index}` }
+                );
 
                 setFormData({
                     ...stationToEdit,
+                    name: stationToEdit.name || '',
+                    classId: stationToEdit.classId || '',
+                    iconUrl: stationToEdit.iconUrl || '',
                     skills: normalizedSkills,
+                    assets: stationToEdit.assets || [],
                     supportNeeds: stationToEdit.supportNeeds || [],
                     leadInstructorId: stationToEdit.leadInstructorId || '',
                     skillAssignments: stationToEdit.skillAssignments || {},
-                    iconUrl: stationToEdit.iconUrl || '', // Ensure iconUrl is set from existing data
                 });
             } else {
-                // MODIFIED: Initializing new station with an empty iconUrl
-                setFormData({ name: '', iconUrl: '', skills: [{ id: Date.now().toString(), text: '' }], classId: classes[0]?.id || '', date: '', startTime: '', endTime: '', hours: '', location: '', summary: '', supportNeeds: [], leadInstructorId: '', skillAssignments: {} });
+                setFormData({ name: '', iconUrl: '', skills: [{ id: Date.now().toString(), text: '' }], classId: classes[0]?.id || '', date: '', startTime: '', endTime: '', hours: '', location: '', summary: '', supportNeeds: [], leadInstructorId: '', skillAssignments: {}, assets: [] });
             }
         }
     }, [stationToEdit, classes, isOpen]);
-
-
+    
     if (!isOpen) return null;
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData({ ...formData, [name]: value });
+    };
 
     const handleSkillChange = (index, text) => {
         const newSkills = [...formData.skills];
@@ -138,9 +137,72 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
         setFormData({ ...formData, supportNeeds: newNeeds });
     };
 
-    const handleInputChange = (e) => {
-        const { name, value } = e.target;
-        setFormData({ ...formData, [name]: value });
+    // --- Asset Management Functions ---
+    const handleAddAsset = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        setError(null);
+        try {
+            const storageRef = ref(storage, `station_assets/${formData.classId}/${Date.now()}_${file.name}`);
+            const snapshot = await uploadBytes(storageRef, file);
+            const downloadURL = await getDownloadURL(snapshot.ref);
+
+            const newAsset = {
+                id: Date.now().toString(),
+                name: file.name,
+                url: downloadURL,
+                type: file.type.startsWith('video') ? 'video' : 'file',
+                isMandatory: false,
+                storagePath: snapshot.ref.fullPath,
+            };
+            setFormData(prev => ({ ...prev, assets: [...prev.assets, newAsset] }));
+        } catch (err) {
+            console.error("Error uploading file:", err);
+            setError("File upload failed. Please try again.");
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleAddVideoLink = () => {
+        const url = prompt("Please enter the video URL (e.g., YouTube, Vimeo):");
+        if (url) {
+            const newAsset = {
+                id: Date.now().toString(),
+                name: "Video Link",
+                url: url,
+                type: 'videoLink',
+                isMandatory: false,
+            };
+            setFormData(prev => ({ ...prev, assets: [...prev.assets, newAsset] }));
+        }
+    };
+
+    const handleToggleMandatory = (assetId) => {
+        setFormData(prev => ({
+            ...prev,
+            assets: prev.assets.map(asset =>
+                asset.id === assetId ? { ...asset, isMandatory: !asset.isMandatory } : asset
+            ),
+        }));
+    };
+    
+    const handleDeleteAsset = async (assetToDelete) => {
+        if (assetToDelete.storagePath) {
+            const fileRef = ref(storage, assetToDelete.storagePath);
+            try {
+                await deleteObject(fileRef);
+            } catch (err) {
+                console.error("Error deleting file from storage:", err);
+                setError("Could not delete the file from storage. Please check permissions.");
+            }
+        }
+        setFormData(prev => ({
+            ...prev,
+            assets: prev.assets.filter(asset => asset.id !== assetToDelete.id),
+        }));
     };
 
     const handleSubmit = async (e) => {
@@ -153,23 +215,16 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
 
         const finalSkills = formData.skills.filter(s => s.text.trim() !== '');
         const finalNeeds = formData.supportNeeds.filter(n => n.need.trim() !== '');
-
         const finalSkillIds = new Set(finalSkills.map(s => s.id));
         const finalSkillAssignments = {};
-        for(const skillId in formData.skillAssignments) {
-            if(finalSkillIds.has(skillId)) {
+        for (const skillId in formData.skillAssignments) {
+            if (finalSkillIds.has(skillId)) {
                 finalSkillAssignments[skillId] = formData.skillAssignments[skillId];
             }
         }
 
-        const dataToSave = {
-            ...formData,
-            skills: finalSkills,
-            supportNeeds: finalNeeds,
-            skillAssignments: finalSkillAssignments
-        };
-        // REMOVED `icon` from dataToSave as it's now `iconUrl`
-
+        const dataToSave = { ...formData, skills: finalSkills, supportNeeds: finalNeeds, skillAssignments: finalSkillAssignments };
+        
         try {
             if (stationToEdit) {
                 const stationRef = doc(db, `artifacts/${appId}/public/data/stations`, stationToEdit.id);
@@ -188,10 +243,14 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-                <div className="p-6 border-b"><h2 className="text-2xl font-bold text-gray-800">{stationToEdit ? 'Edit Station' : 'Add New Station'}</h2></div>
+                <div className="p-6 border-b flex justify-between items-center">
+                    <h2 className="text-2xl font-bold text-gray-800">{stationToEdit ? 'Edit Station' : 'Add New Station'}</h2>
+                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800"><X size={24} /></button>
+                </div>
                 <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto">
-                    <div className="p-6 space-y-4">
+                    <div className="p-6 space-y-6">
                         {error && <p className="text-red-500 bg-red-50 p-3 rounded-lg text-sm">{error}</p>}
+                        
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Class</label>
@@ -204,7 +263,7 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
                                 <input name="name" value={formData.name} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
                             </div>
                         </div>
-                        {/* NEW: Field for selecting an icon */}
+
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Icon</label>
                             <select name="iconUrl" value={formData.iconUrl || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
@@ -214,13 +273,15 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
                                 ))}
                             </select>
                         </div>
+                        
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div><label className="block text-sm font-medium text-gray-700">Date</label><input type="date" name="date" value={formData.date} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                             <div><label className="block text-sm font-medium text-gray-700">Start Time</label><input type="time" name="startTime" value={formData.startTime} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                             <div><label className="block text-sm font-medium text-gray-700">End Time</label><input type="time" name="endTime" value={formData.endTime} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
                         </div>
+
                         <div>
-                            <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Skills & Assignments</h3>
+                            <h3 className="text-lg font-semibold text-gray-900 border-t pt-4 mt-4">Skills & Assignments</h3>
                             <div className="mt-4">
                                 <label className="block text-sm font-medium text-gray-700">Lead Instructor</label>
                                 <select name="leadInstructorId" value={formData.leadInstructorId} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
@@ -238,13 +299,7 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
                                                     options={instructors}
                                                     selected={formData.skillAssignments[skill.id] || []}
                                                     onChange={(selectedInstructors) => {
-                                                        setFormData(prev => ({
-                                                            ...prev,
-                                                            skillAssignments: {
-                                                                ...prev.skillAssignments,
-                                                                [skill.id]: selectedInstructors
-                                                            }
-                                                        }));
+                                                        setFormData(prev => ({ ...prev, skillAssignments: { ...prev.skillAssignments, [skill.id]: selectedInstructors } }));
                                                     }}
                                                 />
                                             </div>
@@ -255,8 +310,9 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
                                 <button type="button" onClick={addSkill} className="flex items-center text-sm text-indigo-600 hover:text-indigo-800"><PlusCircle size={16} className="mr-1" /> Add Skill</button>
                             </div>
                         </div>
+
                         <div>
-                            <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Support Needs</h3>
+                            <h3 className="text-lg font-semibold text-gray-900 border-t pt-4 mt-4">Support Needs</h3>
                             <div className="mt-2 space-y-2">
                                 {formData.supportNeeds.map((need, index) => (
                                     <div key={need.id} className="grid grid-cols-5 gap-2 items-center">
@@ -277,6 +333,39 @@ const StationEditModal = ({ isOpen, onClose, stationToEdit, onSave, classes, all
                                 <button type="button" onClick={addSupportNeed} className="flex items-center text-sm text-indigo-600 hover:text-indigo-800"><PlusCircle size={16} className="mr-1" /> Add Support Need</button>
                             </div>
                         </div>
+
+                        <div className="mb-6">
+                            <h3 className="text-lg font-semibold mb-2  border-t pt-4 mt-4">Station Assets</h3>
+                            <div className="border rounded-lg p-4 bg-gray-50">
+                                {formData.assets.map(asset => (
+                                    <div key={asset.id} className="flex items-center justify-between p-2 border-b last:border-b-0">
+                                        <div className="flex items-center gap-2">
+                                            {asset.type === 'file' ? <Paperclip size={18} /> : <Video size={18} />}
+                                            <a href={asset.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline truncate max-w-xs">{asset.name}</a>
+                                            {asset.isMandatory && <span className="text-xs font-semibold text-red-600 flex items-center gap-1"><AlertTriangle size={14} /> Mandatory</span>}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button type="button" onClick={() => handleToggleMandatory(asset.id)} className={`text-xs px-2 py-1 rounded ${asset.isMandatory ? 'bg-yellow-500 text-white' : 'bg-gray-200'}`}>
+                                                {asset.isMandatory ? 'Set Optional' : 'Set Mandatory'}
+                                            </button>
+                                            <button type="button" onClick={() => handleDeleteAsset(asset)} className="text-red-500 hover:text-red-700"><Trash2 size={18} /></button>
+                                        </div>
+                                    </div>
+                                ))}
+                                {formData.assets.length === 0 && <p className="text-sm text-gray-500 text-center py-2">No assets have been added to this station.</p>}
+
+                                <div className="flex items-center gap-2 mt-4 pt-4 border-t">
+                                    <label className="flex-1 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md py-2 px-4 text-center cursor-pointer">
+                                        <input type="file" className="hidden" onChange={handleAddAsset} disabled={isUploading} />
+                                        {isUploading ? 'Uploading...' : 'Upload File'}
+                                    </label>
+                                    <button type="button" onClick={handleAddVideoLink} className="flex-1 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-md py-2 px-4">
+                                        Add Video Link
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
                     <div className="p-6 bg-gray-50 border-t flex justify-end space-x-3">
                         <button type="button" onClick={onClose} className="px-4 py-2 bg-white border border-gray-300 rounded-md text-sm font-medium hover:bg-gray-50">Cancel</button>
