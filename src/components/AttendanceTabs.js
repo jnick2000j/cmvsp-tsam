@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../firebaseConfig';
 import { collection, doc, getDocs, updateDoc, query, where, onSnapshot } from 'firebase/firestore';
-import { Clock, CheckCircle, UserX } from 'lucide-react';
+import { Clock, CheckCircle, UserX, Users, BookOpen, Briefcase } from 'lucide-react';
 import { PATROLS, MOUNTAIN_AREAS, PATROL_ROLES, PATROL_LEADER_ROLES, appId } from '../constants';
 import ViewAttendance from './ViewAttendance';
 import InstructorAttendance from './InstructorAttendance';
@@ -143,19 +143,19 @@ const AttendanceTabs = ({ allUsers, classes, opportunities }) => {
     }, [classes]);
 
     return (
-        <div>
-            <div className="border-b border-gray-200">
+        <div className="p-4 sm:p-6 lg:p-8">
+            <div className="border-b border-gray-200 mb-6">
                 <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                    <button onClick={() => setActiveTab('patrol')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'patrol' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Patrol Attendance</button>
-                    <button onClick={() => setActiveTab('training')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'training' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Training Attendance</button>
-                    <button onClick={() => setActiveTab('instructor')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'instructor' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Instructor Attendance</button>
-                    <button onClick={() => setActiveTab('support')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'support' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Support Attendance</button>
+                    <button onClick={() => setActiveTab('patrol')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'patrol' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Users className="mr-2" size={18}/>Patrol Attendance</button>
+                    <button onClick={() => setActiveTab('training')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'training' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><BookOpen className="mr-2" size={18}/>Training Attendance</button>
+                    <button onClick={() => setActiveTab('instructor')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'instructor' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><CheckCircle className="mr-2" size={18}/>Instructor Attendance</button>
+                    <button onClick={() => setActiveTab('support')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'support' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Briefcase className="mr-2" size={18}/>Support Attendance</button>
                     <button onClick={() => setActiveTab('pending')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'pending' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
                         <UserX className="mr-2" size={18}/> Pending Enrollments {pendingEnrollments.length > 0 && <span className="ml-2 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">{pendingEnrollments.length}</span>}
                     </button>
                 </nav>
             </div>
-            <div className="p-4">
+            <div>
                 {activeTab === 'patrol' && <PatrolAttendance allUsers={allUsers} />}
                 {activeTab === 'training' && <ViewAttendance allUsers={allUsers} courses={classes} />}
                 {activeTab === 'instructor' && <InstructorAttendance allUsers={allUsers} courses={classes} />}
