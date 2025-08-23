@@ -399,7 +399,7 @@ export default function App() {
             case 'myTraining':
                 return <MyTraining {...{ user, enrolledClassesDetails, dailyCheckIns, setActiveClassId, handlePrerequisiteCheckin, handleCancelEnrollment, allUsers, classes, stations, checkIns, generateClassPdf }} />;
             case 'attendance': return <AttendanceTabs {...{ user, allUsers, classes, stations, attendanceRecords, opportunities, subView, setSubView }} />;
-            case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: handleEnroll, enrollmentError, branding }} />;
+            case 'catalog': return <CourseCatalog {...{ classes, waivers, user, allUsers, onEnrollClick: handleEnroll, onCancelEnrollment: handleCancelEnrollment, enrollmentError, branding }} />;
             case 'profile': return <ProfileManagement {...{ user, setConfirmAction }} />;
             
             case 'mySchedule':
