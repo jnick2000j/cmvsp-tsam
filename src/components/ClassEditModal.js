@@ -1,4 +1,3 @@
-// src/components/ClassEditModal.js
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { doc, updateDoc, addDoc, collection, arrayRemove, getDocs, deleteDoc } from 'firebase/firestore';
 import { db, functions } from '../firebaseConfig';
@@ -7,7 +6,7 @@ import { appId, INSTRUCTOR_ROLES, SUPPORT_ROLES } from '../constants';
 import { PlusCircle, Trash2, ChevronLeft, Check } from 'lucide-react';
 import Icon from './Icon';
 
-const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
+const MultiSelectDropdown = ({ options, selected, onChange, placeholder, displayField = 'title' }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
 
@@ -21,14 +20,17 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const handleSelect = (optionValue) => {
-        const newSelected = selected.includes(optionValue)
-            ? selected.filter(val => val !== optionValue)
-            : [...selected, optionValue];
+    const handleSelect = (optionId) => {
+        const newSelected = selected.includes(optionId)
+            ? selected.filter(id => id !== optionId)
+            : [...selected, optionId];
         onChange(newSelected);
     };
 
-    const selectedNames = selected.join(', ');
+    const selectedNames = options
+        .filter(opt => selected.includes(opt.id))
+        .map(opt => opt[displayField] || `${opt.firstName} ${opt.lastName}`)
+        .join(', ');
 
     return (
         <div className="relative" ref={dropdownRef}>
@@ -41,9 +43,9 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
             {isOpen && (
                 <ul className="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
                     {options.map(option => (
-                        <li key={option} onClick={() => handleSelect(option)} className="cursor-default select-none relative py-2 pl-3 pr-9 text-gray-900 hover:bg-indigo-600 hover:text-white">
-                            <span className="font-normal block truncate">{option}</span>
-                            {selected.includes(option) && (
+                        <li key={option.id} onClick={() => handleSelect(option.id)} className="cursor-default select-none relative py-2 pl-3 pr-9 text-gray-900 hover:bg-indigo-600 hover:text-white">
+                            <span className="font-normal block truncate">{option[displayField] || `${option.firstName} ${option.lastName}`}</span>
+                            {selected.includes(option.id) && (
                                 <span className="absolute inset-y-0 right-0 flex items-center pr-4 text-indigo-600">
                                     <Check className="h-5 w-5" />
                                 </span>
@@ -57,15 +59,13 @@ const MultiSelectDropdown = ({ options, selected, onChange, placeholder }) => {
 };
 
 
-const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser, branding, icons }) => {
+const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, allUsers, currentUser, waivers, branding, icons }) => {
     const [formData, setFormData] = useState({});
     const [numGroups, setNumGroups] = useState(1);
     const [enrolledStudentsList, setEnrolledStudentsList] = useState([]);
-    const [selectedStudent, setSelectedStudent] = useState('');
 
     const allRoles = useMemo(() => ['Student', ...INSTRUCTOR_ROLES, ...SUPPORT_ROLES], []);
     
-    // MODIFIED: Removed `isPrerequisiteUploadRequired` and `requiredWaivers` from the initial form data state.
     const getInitialFormData = useCallback(() => ({
         name: '', 
         iconUrl: '', 
@@ -78,6 +78,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         supportNeeds: [], 
         studentGroups: {}, 
         prerequisites: [],
+        waiverIds: [], // ADDED: waiverIds to initial state
         isHidden: false, 
         visibleToRoles: [], 
         logoUrl: '', 
@@ -113,6 +114,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                 setFormData({
                     ...data,
                     prerequisites: normalizedPrerequisites,
+                    waiverIds: classToEdit.waiverIds || [], // Ensure waiverIds is loaded
                 });
                 const maxGroup = Object.values(data.studentGroups || {}).reduce((max, num) => Math.max(max, num), 1);
                 setNumGroups(maxGroup);
@@ -135,7 +137,10 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
     const handleRoleVisibilityChange = (selectedRoles) => {
         setFormData({ ...formData, visibleToRoles: selectedRoles });
     };
-    // DELETED: handleWaiverChange function
+
+    const handleWaiverChange = (selectedIds) => {
+        setFormData(prev => ({ ...prev, waiverIds: selectedIds }));
+    };
 
     const handlePrereqChange = (index, field, value) => {
         const newPrerequisites = [...(formData.prerequisites || [])];
@@ -223,9 +228,6 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         if (dataToSave.isCompleted && !dataToSave.completedDate) {
             dataToSave.completedDate = new Date();
         }
-
-        // DELETED: Removed requiredWaivers
-        delete dataToSave.requiredWaivers;
 
         try {
             if (classToEdit) {
@@ -333,8 +335,21 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                             </button>
                         </div>
                     </div>
-                    {/* DELETED: Waiver Management Section */}
 
+                    <div>
+                        <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Waivers</h3>
+                        <p className="mt-1 text-sm text-gray-500">Select one or more waivers that must be signed for this class.</p>
+                        <div className="mt-4">
+                            <MultiSelectDropdown
+                                options={waivers || []}
+                                selected={formData.waiverIds || []}
+                                onChange={handleWaiverChange}
+                                placeholder="Assign Waivers..."
+                                displayField="title"
+                            />
+                        </div>
+                    </div>
+                    
                     <div>
                         <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Support Needs</h3>
                         <p className="mt-1 text-sm text-gray-500">Add instructors or other personnel to assist with this class.</p>
@@ -357,10 +372,11 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                     <div className="mt-4 border-t pt-4">
                         <label className="block text-sm font-medium text-gray-700">Visible To Roles</label>
                         <MultiSelectDropdown 
-                            options={allRoles}
+                            options={(allRoles || []).map(r => ({id: r, title: r}))}
                             selected={formData.visibleToRoles || []}
                             onChange={handleRoleVisibilityChange}
                             placeholder="Select roles"
+                            displayField="title"
                         />
                     </div>
                     <div className="mt-4 border-t pt-4">

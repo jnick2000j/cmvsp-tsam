@@ -1,4 +1,3 @@
-// src/components/AdminPortal.js
 import React, { useState, useMemo, useEffect } from 'react';
 import { doc, deleteDoc, updateDoc, query, where, getDocs, collection, addDoc, onSnapshot } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
@@ -7,12 +6,13 @@ import { INSTRUCTOR_ROLES, appId } from '../constants';
 import UserEditModal from './UserEditModal';
 import StationEditModal from './StationEditModal';
 import ClassEditModal from './ClassEditModal';
+import WaiverManagement from './WaiverManagement'; // Import WaiverManagement
 import TimeClockManagement from './TimeClockManagement';
 import IconManagement from './IconManagement'; 
-import { Search, Edit, Trash2, Layers, BookOpen, UserCog, Mail, Smartphone, UserCheck, PlusCircle, Copy, Image as ImageIcon } from 'lucide-react';
+import { Search, Edit, Trash2, Layers, BookOpen, UserCog, FileSignature, Mail, Smartphone, UserCheck, PlusCircle, Copy, Image as ImageIcon } from 'lucide-react';
 import Icon from './Icon';
 
-const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmAction, onApproveUser, branding }) => {
+const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser, branding }) => {
     const [adminView, setAdminView] = useState('users');
     const [searchTerm, setSearchTerm] = useState('');
     const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -163,7 +163,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
         <>
             <UserEditModal isOpen={isUserModalOpen} onClose={handleCloseUserModal} userToEdit={editingUser} onSave={() => {}} />
             <StationEditModal isOpen={isStationModalOpen} onClose={handleCloseStationModal} stationToEdit={editingStation} onSave={() => {}} classes={classes} allUsers={allUsers} icons={icons} />
-            <ClassEditModal isOpen={isClassModalOpen} onClose={handleCloseClassModal} classToEdit={editingClass} onSave={() => {}} instructors={instructors} allUsers={allUsers} currentUser={currentUser} branding={branding} icons={icons} />
+            <ClassEditModal isOpen={isClassModalOpen} onClose={handleCloseClassModal} classToEdit={editingClass} onSave={() => {}} instructors={instructors} allUsers={allUsers} currentUser={currentUser} waivers={waivers} branding={branding} icons={icons} />
 
             <div className="p-4 sm:p-6 lg:p-8">
                 <div className="border-b border-gray-200 mb-6">
@@ -173,6 +173,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                         <button onClick={() => setAdminView('users')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'users' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><UserCog className="mr-2" size={18}/> User Management</button>
                         <button onClick={() => setAdminView('icons')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'icons' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><ImageIcon className="mr-2" size={18}/> Icon Management</button>
                         <button onClick={() => setAdminView('timeclocks')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'timeclocks' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><Smartphone className="mr-2" size={18}/> Time Clock Devices</button>
+                        <button onClick={() => setAdminView('waivers')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${adminView === 'waivers' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}><FileSignature className="mr-2" size={18}/> Waiver Management</button>
                     </nav>
                 </div>
 
@@ -260,6 +261,7 @@ const AdminPortal = ({ currentUser, stations, classes, allUsers, setConfirmActio
                 )}
                 {adminView === 'icons' && <IconManagement icons={icons} setIcons={setIcons} />}
                 {adminView === 'timeclocks' && <TimeClockManagement timeClocks={timeClocks} onSave={handleSaveTimeClock} onDelete={handleDeleteTimeClock} />}
+                {adminView === 'waivers' && <WaiverManagement waivers={waivers} setConfirmAction={setConfirmAction} />}
             </div>
         </>
     );

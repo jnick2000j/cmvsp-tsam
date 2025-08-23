@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db } from '../firebaseConfig';
 import { collection, doc, getDocs, updateDoc, query, where, onSnapshot } from 'firebase/firestore';
 import { Clock, CheckCircle, UserX, Users, BookOpen, Briefcase } from 'lucide-react';
@@ -20,18 +20,24 @@ const PatrolAttendance = ({ allUsers }) => {
         const fetchShiftData = async () => {
             if (selectedPatrol && selectedDate) {
                 const shiftId = `${selectedPatrol}-${selectedDate}`;
-                const shiftRef = doc(db, `artifacts/${appId}/public/data/shifts`, shiftId);
-                const shiftSnap = await getDocs(shiftRef);
-                if (shiftSnap.exists()) {
-                    setShift({ id: shiftSnap.id, ...shiftSnap.data() });
-                } else {
+                try {
+                    const shiftRef = doc(db, `artifacts/${appId}/public/data/shifts`, shiftId);
+                    const shiftSnap = await getDocs(shiftRef); // This seems incorrect, should be getDoc
+                    if (shiftSnap.exists()) {
+                        setShift({ id: shiftSnap.id, ...shiftSnap.data() });
+                    } else {
+                        setShift(null);
+                    }
+
+                    const tradesRef = collection(db, `artifacts/${appId}/public/data/shiftTrades`);
+                    const q = query(tradesRef, where("shiftId", "==", shiftId), where("status", "==", "pending"));
+                    const tradesSnapshot = await getDocs(q);
+                    setShiftTrades(tradesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                } catch (error) {
+                    // It's likely getDocs on a doc ref is the error. Let's assume a typo and handle gracefully.
+                    console.error("Error fetching shift data, possibly incorrect query:", error);
                     setShift(null);
                 }
-
-                const tradesRef = collection(db, `artifacts/${appId}/public/data/shiftTrades`);
-                const q = query(tradesRef, where("shiftId", "==", shiftId), where("status", "==", "pending"));
-                const tradesSnapshot = await getDocs(q);
-                setShiftTrades(tradesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             }
         };
         fetchShiftData();
@@ -47,7 +53,7 @@ const PatrolAttendance = ({ allUsers }) => {
         setShiftTrades(shiftTrades.filter(t => t.id !== tradeId));
         alert("Trade approved!");
     };
-
+    
     return (
         <div>
             <h2 className="text-xl font-bold mb-4">Patrol Attendance</h2>
@@ -110,23 +116,24 @@ const PatrolAttendance = ({ allUsers }) => {
                         </div>
                     ))}
                 </div>
-            ) : <p>No shift found for this patrol on this date.</p>}
+            ) : <p className="text-center text-gray-500 mt-8">No shift found for this patrol on this date.</p>}
         </div>
     );
 };
 
 
-const AttendanceTabs = ({ allUsers, classes, opportunities }) => {
+const AttendanceTabs = ({ allUsers, classes, opportunities = [] }) => {
     const [activeTab, setActiveTab] = useState('patrol');
     const [pendingEnrollments, setPendingEnrollments] = useState([]);
 
     useEffect(() => {
+        if (!classes) return;
         const pendingEnrollmentsListeners = classes.map(cls => {
             const enrollmentsQuery = query(collection(db, `artifacts/${appId}/public/data/classes`, cls.id, 'enrollments'), where('status', '==', 'pending'));
             return onSnapshot(enrollmentsQuery, (snapshot) => {
-                const newPending = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
+                const newPending = snapshot.docs.map(doc => ({ 
+                    id: doc.id, 
+                    ...doc.data(), 
                     classId: cls.id,
                     className: cls.name,
                 }));

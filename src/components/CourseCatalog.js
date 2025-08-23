@@ -1,12 +1,15 @@
-// src/components/CourseCatalog.js
 import React, { useState, useMemo } from 'react';
 import { Calendar, MapPin, Hourglass, Search } from 'lucide-react';
 import Icon from './Icon';
-import PrerequisiteModal from './PrerequisiteModal'; 
+import PrerequisiteModal from './PrerequisiteModal';
+import WaiverSigningModal from './WaiverSigningModal'; // Import WaiverSigningModal
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../firebaseConfig';
 
-const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError, onCancelEnrollment, branding }) => {
+const CourseCatalog = ({ classes, waivers, user, allUsers, onEnrollClick, enrollmentError, onCancelEnrollment, branding }) => {
     const [searchTerm, setSearchTerm] = useState('');
-    const [prerequisiteClass, setPrerequisiteClass] = useState(null); 
+    const [prerequisiteClass, setPrerequisiteClass] = useState(null);
+    const [waiverClass, setWaiverClass] = useState(null); // State for waiver signing process
 
     const getLeadInstructorName = (instructorId) => {
         const instructor = allUsers.find(u => u.id === instructorId);
@@ -28,25 +31,61 @@ const CourseCatalog = ({ classes, user, allUsers, onEnrollClick, enrollmentError
                 course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (getLeadInstructorName(course.leadInstructorId) || '').toLowerCase().includes(searchTerm.toLowerCase())
             );
-    }, [classes, searchTerm, user, allUsers, getLeadInstructorName]);
+    }, [classes, searchTerm, user, allUsers]);
 
     const handleEnrollClick = (course) => {
-        if (course.prerequisites && course.prerequisites.length > 0) {
+        // Step 1: Check for Waivers first
+        if (course.waiverIds && course.waiverIds.length > 0) {
+            setWaiverClass(course);
+        } // Step 2: Then check for prerequisites
+        else if (course.prerequisites && course.prerequisites.length > 0) {
             setPrerequisiteClass(course);
         } else {
+            // No waivers or prerequisites, enroll directly
             onEnrollClick(course.id);
         }
     };
     
+    const handleWaiverConfirmation = (signatures) => {
+        setWaiverClass(null); // Close waiver modal
+        // After waivers are signed, check for prerequisites
+        if (waiverClass.prerequisites && waiverClass.prerequisites.length > 0) {
+            setPrerequisiteClass(waiverClass);
+        } else {
+            // If no prerequisites, proceed to enroll with signatures
+            const enrollWithWaivers = httpsCallable(functions, 'enrollStudent');
+            enrollWithWaivers({
+                classId: waiverClass.id,
+                studentId: user.uid,
+                waiverSignatures: signatures,
+            }).catch(err => {
+                console.error("Enrollment after waiver signing failed:", err);
+            });
+        }
+    };
+
+    const handlePrerequisiteSubmit = () => {
+        // This function will be called from PrerequisiteModal on successful submission.
+        // It's assumed that the prerequisite modal will handle the cloud function call.
+        setPrerequisiteClass(null);
+    };
+
     const isEnrolled = (courseId) => user.enrolledClasses?.includes(courseId);
 
     return (
         <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+            <WaiverSigningModal
+                isOpen={!!waiverClass}
+                onClose={() => setWaiverClass(null)}
+                waiversToSign={waivers.filter(w => waiverClass?.waiverIds?.includes(w.id))}
+                onConfirm={handleWaiverConfirmation}
+            />
             <PrerequisiteModal
                 isOpen={!!prerequisiteClass}
                 onClose={() => setPrerequisiteClass(null)}
                 classToEnroll={prerequisiteClass}
                 user={user}
+                onSuccess={handlePrerequisiteSubmit}
             />
 
             <div className="sm:flex sm:items-center sm:justify-between">

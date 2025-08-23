@@ -5,7 +5,6 @@ const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
 initializeApp();
 
-// --- MODIFIED: createUserAccount function ---
 exports.createUserAccount = onCall(async (request) => {
     const data = request.data;
     if (!data.email || !data.password) {
@@ -57,10 +56,8 @@ exports.createUserAccount = onCall(async (request) => {
     }
 });
 
-
-// --- MODIFIED: enrollStudent Function to immediately approve students with prerequisites ---
 exports.enrollStudent = onCall(async (request) => {
-    const { classId, studentId, prerequisiteSubmissions = {} } = request.data;
+    const { classId, studentId, prerequisiteSubmissions = {}, waiverSignatures = {} } = request.data;
     const uid = request.auth.uid;
     const appId = "cmvsp-tsam";
 
@@ -77,10 +74,17 @@ exports.enrollStudent = onCall(async (request) => {
     if (!classDoc.exists) {
         throw new HttpsError('not-found', 'The specified class could not be found.');
     }
+    const classData = classDoc.data();
 
     const existingEnrollment = await enrollmentRef.get();
     if (existingEnrollment.exists && existingEnrollment.data().status === 'approved') {
         return { success: true, message: 'Student is already enrolled.' };
+    }
+
+    // Check for waiver signatures if waivers are required
+    const hasWaivers = classData.waiverIds && classData.waiverIds.length > 0;
+    if (hasWaivers && Object.keys(waiverSignatures).length !== classData.waiverIds.length) {
+        throw new HttpsError('failed-precondition', 'All required waivers must be signed to enroll.');
     }
 
     try {
@@ -90,6 +94,7 @@ exports.enrollStudent = onCall(async (request) => {
             approvedAt: FieldValue.serverTimestamp(),
             approvedBy: uid,
             prerequisiteSubmissions,
+            waiverSignatures, // Save waiver signatures
         });
 
         await studentRef.update({
