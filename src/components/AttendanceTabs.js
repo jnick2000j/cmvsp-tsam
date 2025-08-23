@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../firebaseConfig';
-import { collection, doc, getDocs, updateDoc, query, where } from 'firebase/firestore';
-import { Clock, CheckCircle } from 'lucide-react';
+import { collection, doc, getDocs, updateDoc, query, where, onSnapshot } from 'firebase/firestore';
+import { Clock, CheckCircle, UserX } from 'lucide-react';
 import { PATROLS, MOUNTAIN_AREAS, PATROL_ROLES, PATROL_LEADER_ROLES, appId } from '../constants';
 import ViewAttendance from './ViewAttendance';
 import InstructorAttendance from './InstructorAttendance';
 import SupportAttendance from './SupportAttendance';
+import PendingEnrollmentManagement from './PendingEnrollmentManagement';
 
 const ALL_PATROL_ROLES = [...new Set([...PATROL_ROLES, ...PATROL_LEADER_ROLES])];
 
@@ -46,7 +47,7 @@ const PatrolAttendance = ({ allUsers }) => {
         setShiftTrades(shiftTrades.filter(t => t.id !== tradeId));
         alert("Trade approved!");
     };
-    
+
     return (
         <div>
             <h2 className="text-xl font-bold mb-4">Patrol Attendance</h2>
@@ -115,22 +116,51 @@ const PatrolAttendance = ({ allUsers }) => {
 };
 
 
-const AttendanceTabs = ({ allUsers, courses, opportunities }) => {
+const AttendanceTabs = ({ allUsers, classes, opportunities }) => {
     const [activeTab, setActiveTab] = useState('patrol');
+    const [pendingEnrollments, setPendingEnrollments] = useState([]);
+
+    useEffect(() => {
+        const pendingEnrollmentsListeners = classes.map(cls => {
+            const enrollmentsQuery = query(collection(db, `artifacts/${appId}/public/data/classes`, cls.id, 'enrollments'), where('status', '==', 'pending'));
+            return onSnapshot(enrollmentsQuery, (snapshot) => {
+                const newPending = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    classId: cls.id,
+                    className: cls.name,
+                }));
+                setPendingEnrollments(prev => {
+                    const otherPendings = prev.filter(p => p.classId !== cls.id);
+                    return [...otherPendings, ...newPending];
+                });
+            });
+        });
+
+        return () => {
+            pendingEnrollmentsListeners.forEach(unsub => unsub());
+        };
+    }, [classes]);
 
     return (
         <div>
-            <div className="flex border-b">
-                <button onClick={() => setActiveTab('patrol')} className={`px-4 py-2 text-sm font-medium ${activeTab === 'patrol' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>Patrol Attendance</button>
-                <button onClick={() => setActiveTab('training')} className={`px-4 py-2 text-sm font-medium ${activeTab === 'training' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>Training Attendance</button>
-                <button onClick={() => setActiveTab('instructor')} className={`px-4 py-2 text-sm font-medium ${activeTab === 'instructor' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>Instructor Attendance</button>
-                <button onClick={() => setActiveTab('support')} className={`px-4 py-2 text-sm font-medium ${activeTab === 'support' ? 'border-b-2 border-accent text-accent' : 'text-gray-500'}`}>Support Attendance</button>
+            <div className="border-b border-gray-200">
+                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button onClick={() => setActiveTab('patrol')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'patrol' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Patrol Attendance</button>
+                    <button onClick={() => setActiveTab('training')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'training' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Training Attendance</button>
+                    <button onClick={() => setActiveTab('instructor')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'instructor' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Instructor Attendance</button>
+                    <button onClick={() => setActiveTab('support')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'support' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>Support Attendance</button>
+                    <button onClick={() => setActiveTab('pending')} className={`whitespace-nowrap flex items-center py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'pending' ? 'border-accent text-accent' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                        <UserX className="mr-2" size={18}/> Pending Enrollments {pendingEnrollments.length > 0 && <span className="ml-2 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">{pendingEnrollments.length}</span>}
+                    </button>
+                </nav>
             </div>
             <div className="p-4">
                 {activeTab === 'patrol' && <PatrolAttendance allUsers={allUsers} />}
-                {activeTab === 'training' && <ViewAttendance allUsers={allUsers} courses={courses} />}
-                {activeTab === 'instructor' && <InstructorAttendance allUsers={allUsers} courses={courses} />}
+                {activeTab === 'training' && <ViewAttendance allUsers={allUsers} courses={classes} />}
+                {activeTab === 'instructor' && <InstructorAttendance allUsers={allUsers} courses={classes} />}
                 {activeTab === 'support' && <SupportAttendance allUsers={allUsers} opportunities={opportunities} />}
+                {activeTab === 'pending' && <PendingEnrollmentManagement pendingEnrollments={pendingEnrollments} allUsers={allUsers} classes={classes} />}
             </div>
         </div>
     );
