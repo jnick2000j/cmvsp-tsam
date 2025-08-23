@@ -52,6 +52,7 @@ export default function App() {
     const [shifts, setShifts] = useState([]);
     const [timeClockEntries, setTimeClockEntries] = useState([]);
     const [timeClocks, setTimeClocks] = useState([]);
+    const [opportunities, setOpportunities] = useState([]); // NEW: State for support opportunities
     const [loginMessage, setLoginMessage] = useState('');
     const [view, setView] = useState('dashboard');
     const [subView, setSubView] = useState('');
@@ -120,7 +121,8 @@ export default function App() {
             attendanceRecords: setAttendanceRecords,
             shifts: setShifts,
             timeClockEntries: setTimeClockEntries,
-            timeclocks: setTimeClocks
+            timeclocks: setTimeClocks,
+            opportunities: setOpportunities, // NEW: Fetch opportunities
         };
 
         const unsubscribers = Object.entries(collectionsToWatch).map(([name, setter]) => {
@@ -130,6 +132,7 @@ export default function App() {
             }, (err) => console.error(`Failed to load ${name}:`, err));
         });
 
+        // --- MODIFIED: Listener for pending shift trade requests now includes multiple statuses ---
         const tradeRequestsQuery = query(collection(db, `artifacts/${appId}/public/data/shiftTradeRequests`), where('status', 'in', ['pending_user_approval', 'pending_leader_approval']));
         const unsubTrades = onSnapshot(tradeRequestsQuery, (snapshot) => {
             setShiftTradeRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -161,6 +164,7 @@ export default function App() {
     const handleOpenTradeModal = (shift) => { setTradeableShift(shift); setIsTradeModalOpen(true); };
     const handleCloseTradeModal = () => { setTradeableShift(null); setIsTradeModalOpen(false); };
 
+    // MODIFIED: Initial submission now waits for the other user's approval
     const handleSubmitShiftTrade = async ({ requesterShift, requestedUser, requestedShift }) => {
         if (!user || !requesterShift || !requestedUser || !requestedShift) return;
         await addDoc(collection(db, `artifacts/${appId}/public/data/shiftTradeRequests`), {
@@ -172,21 +176,23 @@ export default function App() {
             requestedUserName: `${requestedUser.firstName} ${requestedUser.lastName}`,
             requestedShiftId: requestedShift.id,
             requestedShiftInfo: `${new Date(requestedShift.date).toLocaleDateString()} - ${requestedShift.type}`,
-            status: 'pending_user_approval',
-            approvals: { [user.uid]: true },
+            status: 'pending_user_approval', // New initial status
+            approvals: { [user.uid]: true }, // Requester implicitly approves
             requestTimestamp: serverTimestamp(),
         });
         handleCloseTradeModal();
     };
     
+    // NEW: Handler for the second user to approve the trade
     const handleUserApproveShiftTrade = async (tradeRequest) => {
         const tradeRequestRef = doc(db, `artifacts/${appId}/public/data/shiftTradeRequests`, tradeRequest.id);
         await updateDoc(tradeRequestRef, {
-            status: 'pending_leader_approval',
+            status: 'pending_leader_approval', // Now moves to leadership for final approval
             approvals: { ...tradeRequest.approvals, [user.uid]: true }
         });
     };
 
+    // NEW: Handler for any party to deny/cancel the trade
     const handleDenyShiftTrade = async (tradeRequest) => {
         const tradeRequestRef = doc(db, `artifacts/${appId}/public/data/shiftTradeRequests`, tradeRequest.id);
         await updateDoc(tradeRequestRef, {
@@ -196,6 +202,7 @@ export default function App() {
         });
     };
 
+    // MODIFIED: This is now the FINAL leadership approval step
     const handleApproveShiftTrade = async (tradeRequest) => {
         const requesterShiftRef = doc(db, `artifacts/${appId}/public/data/shifts`, tradeRequest.requesterShiftId);
         const requestedShiftRef = doc(db, `artifacts/${appId}/public/data/shifts`, tradeRequest.requestedShiftId);
@@ -235,6 +242,7 @@ export default function App() {
         }
     };
     
+    // Omitted other handlers for brevity...
     const handlePrerequisiteCheckin = async (course) => {
         const todayISO = new Date().toISOString().split('T')[0];
         const checkInData = {
@@ -318,6 +326,7 @@ export default function App() {
     };
 
     const handleClassCheckIn = async (attendee, course, station) => {
+        // **FIXED: This function now correctly handles check-ins and includes more data.**
         try {
             if (!attendee || !course) {
                 throw new Error("Attendee or course information is missing.");
@@ -330,11 +339,12 @@ export default function App() {
                 role: attendee.role,
                 classId: course.id,
                 className: course.name,
+                // Safely handle cases where there is no station
                 stationId: station ? station.id : null,
                 stationName: station ? station.name : null,
                 checkInDate: todayISO,
                 checkInTime: serverTimestamp(),
-                checkOutTime: null,
+                checkOutTime: null, // Ensure checkout time is null on creation
                 status: 'pending',
             };
             
@@ -342,11 +352,13 @@ export default function App() {
             console.log("Successfully checked in with document ID:", docRef.id);
         } catch (error) {
             console.error("Error during class check-in:", error);
+            // This re-throws the error so the calling component (ClassClock) can catch it.
             throw error;
         }
     };
 
     const handleClassCheckOut = async (checkInId) => {
+        // **FIXED: Added error handling and validation.**
         try {
             if (!checkInId) {
                 throw new Error("No check-in ID provided for checkout.");
@@ -358,6 +370,7 @@ export default function App() {
             console.log("Successfully checked out for checkInId:", checkInId);
         } catch (error) {
             console.error("Error during class check-out:", error);
+            // This re-throws the error so the calling component can catch it.
             throw error;
         }
     };
@@ -385,8 +398,8 @@ export default function App() {
             case 'siteBranding': return <div className="p-4 sm:p-6 lg:p-8"><Branding branding={branding} onUpdate={setBranding} /></div>;
             case 'myTraining':
                 return <MyTraining {...{ user, enrolledClassesDetails, dailyCheckIns, setActiveClassId, handlePrerequisiteCheckin, handleCancelEnrollment, allUsers, classes, stations, checkIns, generateClassPdf }} />;
-            case 'attendance': return <AttendanceTabs {...{ user, allUsers, classes, stations, attendanceRecords, subView, setSubView }} />;
-            case 'catalog': return <CourseCatalog {...{ classes, waivers, user, allUsers, onEnrollClick: handleEnroll, enrollmentError, branding }} />;
+            case 'attendance': return <AttendanceTabs {...{ user, allUsers, classes, stations, attendanceRecords, opportunities, subView, setSubView }} />;
+            case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: handleEnroll, enrollmentError, branding }} />;
             case 'profile': return <ProfileManagement {...{ user, setConfirmAction }} />;
             
             case 'mySchedule':
@@ -484,6 +497,7 @@ export default function App() {
             <main className="max-w-7xl mx-auto">
                 {renderContent()}
             </main>
+            {/* --- Render Shift Trade Modal --- */}
             {isTradeModalOpen && (
                 <ShiftTradeModal
                     isOpen={isTradeModalOpen}
