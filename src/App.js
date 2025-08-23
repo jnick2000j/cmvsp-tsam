@@ -44,6 +44,7 @@ export default function App() {
 
     const [stations, setStations] = useState([]);
     const [classes, setClasses] = useState([]);
+    const [waivers, setWaivers] = useState([]);
     const [allUsers, setAllUsers] = useState([]);
     const [dailyCheckIns, setDailyCheckIns] = useState([]);
     const [checkIns, setCheckIns] = useState([]);
@@ -112,6 +113,7 @@ export default function App() {
         const collectionsToWatch = {
             classes: setClasses,
             stations: setStations,
+            waivers: setWaivers,
             users: setAllUsers,
             checkins: setCheckIns,
             dailyCheckIns: setDailyCheckIns,
@@ -170,8 +172,8 @@ export default function App() {
             requestedUserName: `${requestedUser.firstName} ${requestedUser.lastName}`,
             requestedShiftId: requestedShift.id,
             requestedShiftInfo: `${new Date(requestedShift.date).toLocaleDateString()} - ${requestedShift.type}`,
-            status: 'pending_user_approval', 
-            approvals: { [user.uid]: true }, 
+            status: 'pending_user_approval',
+            approvals: { [user.uid]: true },
             requestTimestamp: serverTimestamp(),
         });
         handleCloseTradeModal();
@@ -180,7 +182,7 @@ export default function App() {
     const handleUserApproveShiftTrade = async (tradeRequest) => {
         const tradeRequestRef = doc(db, `artifacts/${appId}/public/data/shiftTradeRequests`, tradeRequest.id);
         await updateDoc(tradeRequestRef, {
-            status: 'pending_leader_approval', 
+            status: 'pending_leader_approval',
             approvals: { ...tradeRequest.approvals, [user.uid]: true }
         });
     };
@@ -332,7 +334,7 @@ export default function App() {
                 stationName: station ? station.name : null,
                 checkInDate: todayISO,
                 checkInTime: serverTimestamp(),
-                checkOutTime: null, 
+                checkOutTime: null,
                 status: 'pending',
             };
             
@@ -370,7 +372,6 @@ export default function App() {
 
     const isInstructor = user.isAdmin || INSTRUCTOR_ROLES.includes(user.role);
     const isPatrolLeadership = user.isAdmin || PATROL_LEADER_ROLES.includes(user.ability);
-    const isStudent = user.role === 'Student'; // ADDED: Definition for isStudent
     const hasSchedulingAccess = user.isAdmin || user.allowScheduling;
 
     const renderContent = () => {
@@ -380,12 +381,12 @@ export default function App() {
             return <MyStations activeClass={activeClass} stations={stations} onBack={() => setActiveClassId(null)} />
         }
         switch (view) {
-            case 'admin': return <AdminPortal {...{ currentUser: user, stations, classes, allUsers, setConfirmAction, onApproveUser: handleApproveUser, branding }} />;
+            case 'admin': return <AdminPortal {...{ currentUser: user, stations, classes, allUsers, setConfirmAction, waivers, onApproveUser: handleApproveUser, branding }} />;
             case 'siteBranding': return <div className="p-4 sm:p-6 lg:p-8"><Branding branding={branding} onUpdate={setBranding} /></div>;
             case 'myTraining':
                 return <MyTraining {...{ user, enrolledClassesDetails, dailyCheckIns, setActiveClassId, handlePrerequisiteCheckin, handleCancelEnrollment, allUsers, classes, stations, checkIns, generateClassPdf }} />;
             case 'attendance': return <AttendanceTabs {...{ user, allUsers, classes, stations, attendanceRecords, subView, setSubView }} />;
-            case 'catalog': return <CourseCatalog {...{ classes, user, allUsers, onEnrollClick: handleEnroll, enrollmentError, onCancelEnrollment: handleCancelEnrollment, branding }} />;
+            case 'catalog': return <CourseCatalog {...{ classes, waivers, user, allUsers, onEnrollClick: handleEnroll, enrollmentError, branding }} />;
             case 'profile': return <ProfileManagement {...{ user, setConfirmAction }} />;
             
             case 'mySchedule':
@@ -417,7 +418,7 @@ export default function App() {
                 return <Dashboard {...{
                     user,
                     isInstructor,
-                    isStudent,
+                    isStudent: !isInstructor,
                     enrolledClassesDetails,
                     dailyCheckIns,
                     setActiveClassId,
