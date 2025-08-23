@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Check } from 'lucide-react';
 
-const WaiverSigningModal = ({ isOpen, onClose, waiversToSign, onConfirm }) => {
+const WaiverSigningModal = ({ isOpen, onClose, waiversToSign, user, onConfirm }) => {
     const [signatures, setSignatures] = useState({});
     const [error, setError] = useState('');
 
@@ -12,9 +12,9 @@ const WaiverSigningModal = ({ isOpen, onClose, waiversToSign, onConfirm }) => {
     };
 
     const handleConfirmSigning = () => {
-        const unsignedWaivers = waiversToSign.filter(w => !signatures[w.id]);
+        const unsignedWaivers = waiversToSign.filter(w => !signatures[w.id] || signatures[w.id].trim() === '');
         if (unsignedWaivers.length > 0) {
-            setError('Please sign all waivers to continue.');
+            setError('Please sign all waivers by typing your full name.');
             return;
         }
         setError('');
@@ -32,7 +32,7 @@ const WaiverSigningModal = ({ isOpen, onClose, waiversToSign, onConfirm }) => {
                         <div key={waiver.id} className="p-4 border rounded-md">
                             <h3 className="font-bold text-lg mb-2">{waiver.title}</h3>
                             <div className="prose prose-sm max-w-none h-48 overflow-y-auto border p-2 rounded-md bg-gray-50">
-                                <p>{waiver.content}</p>
+                                <p style={{ whiteSpace: 'pre-wrap' }}>{waiver.content}</p>
                             </div>
                             <div className="mt-4">
                                 <label className="block text-sm font-medium text-gray-700">
@@ -40,6 +40,7 @@ const WaiverSigningModal = ({ isOpen, onClose, waiversToSign, onConfirm }) => {
                                 </label>
                                 <input
                                     type="text"
+                                    placeholder={`${user.firstName} ${user.lastName}`}
                                     onChange={(e) => handleSignatureChange(waiver.id, e.target.value)}
                                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
                                 />

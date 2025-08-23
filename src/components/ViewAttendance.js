@@ -1,155 +1,164 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { collection, onSnapshot, query, where, getDoc, doc } from 'firebase/firestore';
+import { db } from '../firebaseConfig';
+import { appId } from '../constants';
 import { Download, Search } from 'lucide-react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import EnrolledStudentDetailsModal from './EnrolledStudentDetailsModal';
 
-const ViewAttendance = ({ classes, allUsers, attendanceRecords, stations }) => {
-    const [selectedClassId, setSelectedClassId] = useState('');
+const ViewAttendance = ({ courses, allUsers, waivers }) => {
+    const [selectedCourseId, setSelectedCourseId] = useState('');
+    const [enrolledStudents, setEnrolledStudents] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedStudent, setSelectedStudent] = useState(null);
+    const [enrollmentDetails, setEnrollmentDetails] = useState(null);
 
     const classOptions = useMemo(() => {
-        return classes.map(c => ({ value: c.id, label: c.name }));
-    }, [classes]);
+        return courses.map(c => ({ value: c.id, label: c.name }));
+    }, [courses]);
 
-    const filteredAttendance = useMemo(() => {
-        if (!selectedClassId) return [];
-        
-        let records = attendanceRecords.filter(rec => {
-            const station = stations.find(s => s.id === rec.stationId);
-            return station && station.classId === selectedClassId;
-        });
+    useEffect(() => {
+        if (selectedCourseId) {
+            const enrollmentsRef = collection(db, `artifacts/${appId}/public/data/classes`, selectedCourseId, 'enrollments');
+            const q = query(enrollmentsRef, where('status', '==', 'approved'));
+            const unsubscribe = onSnapshot(q, async (snapshot) => {
+                const studentData = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                
+                const studentList = allUsers
+                    .filter(user => studentData.some(e => e.id === user.id))
+                    .map(student => ({
+                        ...student,
+                        enrollmentData: studentData.find(e => e.id === student.id)
+                    }));
 
-        if (searchTerm) {
-            const lowercasedFilter = searchTerm.toLowerCase();
-            records = records.filter(rec => {
-                const user = allUsers.find(u => u.id === rec.userId);
-                return user && `${user.firstName} ${user.lastName}`.toLowerCase().includes(lowercasedFilter);
+                setEnrolledStudents(studentList);
             });
+            return () => unsubscribe();
+        } else {
+            setEnrolledStudents([]);
         }
-        
-        return records;
-    }, [selectedClassId, searchTerm, attendanceRecords, stations, allUsers]);
+    }, [selectedCourseId, allUsers]);
+
+    const filteredStudents = useMemo(() => {
+        if (!searchTerm) return enrolledStudents;
+        const lowercasedFilter = searchTerm.toLowerCase();
+        return enrolledStudents.filter(student => 
+            `${student.firstName} ${student.lastName}`.toLowerCase().includes(lowercasedFilter) ||
+            student.email.toLowerCase().includes(lowercasedFilter)
+        );
+    }, [searchTerm, enrolledStudents]);
+
+    const handleViewDetails = async (student) => {
+        setSelectedStudent(student);
+        setEnrollmentDetails(student.enrollmentData);
+    };
 
     const downloadPdf = () => {
-        const selectedClass = classes.find(c => c.id === selectedClassId);
+        const selectedClass = courses.find(c => c.id === selectedCourseId);
         if (!selectedClass) return;
 
         const doc = new jsPDF();
-        doc.text(`Attendance for: ${selectedClass.name}`, 14, 16);
+        doc.text(`Class Roster for: ${selectedClass.name}`, 14, 16);
         
-        const tableColumn = ["Name", "Station", "Check-in Time", "Check-out Time", "Duration (min)"];
+        const tableColumn = ["Name", "Email", "Phone"];
         const tableRows = [];
 
-        filteredAttendance.forEach(record => {
-            const user = allUsers.find(u => u.id === record.userId);
-            const station = stations.find(s => s.id === record.stationId);
-            const checkInTime = record.checkInTime ? new Date(record.checkInTime.seconds * 1000) : null;
-            const checkOutTime = record.checkOutTime ? new Date(record.checkOutTime.seconds * 1000) : null;
-
-            let duration = 'N/A';
-            if(checkInTime && checkOutTime) {
-                const diffMs = checkOutTime - checkInTime;
-                duration = Math.round(diffMs / 60000);
-            }
-
+        filteredStudents.forEach(student => {
             const rowData = [
-                user ? `${user.firstName} ${user.lastName}` : 'Unknown User',
-                station ? station.name : 'Unknown Station',
-                checkInTime ? checkInTime.toLocaleTimeString() : 'N/A',
-                checkOutTime ? checkOutTime.toLocaleTimeString() : 'N/A',
-                duration
+                `${student.firstName} ${student.lastName}`,
+                student.email,
+                student.phone || 'N/A'
             ];
             tableRows.push(rowData);
         });
 
         doc.autoTable(tableColumn, tableRows, { startY: 20 });
-        doc.save(`attendance_${selectedClass.name.replace(/\s+/g, '_')}.pdf`);
+        doc.save(`roster_${selectedClass.name.replace(/\s+/g, '_')}.pdf`);
     };
 
-
     return (
-        <div className="bg-white p-6 rounded-xl shadow-lg">
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">View Class Attendance</h2>
-                <button 
-                    onClick={downloadPdf} 
-                    disabled={!selectedClassId || filteredAttendance.length === 0}
-                    className="flex items-center px-4 py-2 bg-primary text-white rounded-md shadow-sm hover:bg-primary-hover disabled:bg-gray-400 disabled:cursor-not-allowed"
-                >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download PDF
-                </button>
-            </div>
+        <>
+            <div className="bg-white p-6 rounded-xl shadow-lg">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-gray-800">View Class Roster & Attendance</h2>
+                    <button 
+                        onClick={downloadPdf} 
+                        disabled={!selectedCourseId || filteredStudents.length === 0}
+                        className="flex items-center px-4 py-2 bg-primary text-white rounded-md shadow-sm hover:bg-primary-hover disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download Roster
+                    </button>
+                </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                 <select 
-                    value={selectedClassId} 
-                    onChange={(e) => setSelectedClassId(e.target.value)}
-                    className="w-full border-gray-300 rounded-md shadow-sm"
-                >
-                    <option value="">-- Select a Class --</option>
-                    {classOptions.map(option => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                </select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                     <select 
+                        value={selectedCourseId} 
+                        onChange={(e) => setSelectedCourseId(e.target.value)}
+                        className="w-full border-gray-300 rounded-md shadow-sm"
+                    >
+                        <option value="">-- Select a Class --</option>
+                        {classOptions.map(option => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                    </select>
 
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                    <input 
-                        type="text" 
-                        placeholder="Search by name..." 
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border rounded-md"
-                        disabled={!selectedClassId}
-                    />
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                        <input 
+                            type="text" 
+                            placeholder="Search by name..." 
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border rounded-md"
+                            disabled={!selectedCourseId}
+                        />
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {selectedCourseId ? filteredStudents.map(student => (
+                                <tr key={student.id}>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{student.firstName} {student.lastName}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.email}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-right">
+                                        <button onClick={() => handleViewDetails(student)} className="text-indigo-600 hover:text-indigo-900">
+                                            View Details
+                                        </button>
+                                    </td>
+                                </tr>
+                            )) : (
+                                <tr>
+                                    <td colSpan="3" className="px-6 py-12 text-center text-sm text-gray-500">
+                                        Please select a class to view the roster.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
-
-            <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Station</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-in</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-out</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration (min)</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {selectedClassId ? filteredAttendance.map(record => {
-                            const user = allUsers.find(u => u.id === record.userId);
-                            const station = stations.find(s => s.id === record.stationId);
-                            const checkInTime = record.checkInTime ? new Date(record.checkInTime.seconds * 1000) : null;
-                            const checkOutTime = record.checkOutTime ? new Date(record.checkOutTime.seconds * 1000) : null;
-
-                             let duration = 'N/A';
-                            if(checkInTime && checkOutTime) {
-                                const diffMs = checkOutTime - checkInTime;
-                                duration = Math.round(diffMs / 60000);
-                            }
-
-                            return (
-                                <tr key={record.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{user ? `${user.firstName} ${user.lastName}` : 'Loading...'}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{station ? station.name : 'Loading...'}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{checkInTime ? checkInTime.toLocaleTimeString() : ''}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{checkOutTime ? checkOutTime.toLocaleTimeString() : ''}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{duration}</td>
-                                </tr>
-                            )
-                        }) : (
-                            <tr>
-                                <td colSpan="5" className="px-6 py-12 text-center text-sm text-gray-500">
-                                    Please select a class to view attendance records.
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+            <EnrolledStudentDetailsModal
+                isOpen={!!selectedStudent}
+                onClose={() => setSelectedStudent(null)}
+                student={selectedStudent}
+                waivers={waivers}
+                enrollmentDetails={enrollmentDetails}
+            />
+        </>
     );
 };
 

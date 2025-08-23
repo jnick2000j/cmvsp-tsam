@@ -3,8 +3,9 @@ import { doc, updateDoc, addDoc, collection, arrayRemove, getDocs, deleteDoc } f
 import { db, functions } from '../firebaseConfig';
 import { httpsCallable } from 'firebase/functions';
 import { appId, INSTRUCTOR_ROLES, SUPPORT_ROLES } from '../constants';
-import { PlusCircle, Trash2, ChevronLeft, Check } from 'lucide-react';
+import { PlusCircle, Trash2, ChevronLeft, Check, Users } from 'lucide-react';
 import Icon from './Icon';
+import ClassRosterModal from './ClassRosterModal';
 
 const MultiSelectDropdown = ({ options, selected, onChange, placeholder, displayField = 'title' }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -63,6 +64,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
     const [formData, setFormData] = useState({});
     const [numGroups, setNumGroups] = useState(1);
     const [enrolledStudentsList, setEnrolledStudentsList] = useState([]);
+    const [isRosterOpen, setIsRosterOpen] = useState(false);
 
     const allRoles = useMemo(() => ['Student', ...INSTRUCTOR_ROLES, ...SUPPORT_ROLES], []);
     
@@ -78,7 +80,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
         supportNeeds: [], 
         studentGroups: {}, 
         prerequisites: [],
-        waiverIds: [], // ADDED: waiverIds to initial state
+        waiverIds: [],
         isHidden: false, 
         visibleToRoles: [], 
         logoUrl: '', 
@@ -114,7 +116,7 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
                 setFormData({
                     ...data,
                     prerequisites: normalizedPrerequisites,
-                    waiverIds: classToEdit.waiverIds || [], // Ensure waiverIds is loaded
+                    waiverIds: classToEdit.waiverIds || [],
                 });
                 const maxGroup = Object.values(data.studentGroups || {}).reduce((max, num) => Math.max(max, num), 1);
                 setNumGroups(maxGroup);
@@ -241,163 +243,179 @@ const ClassEditModal = ({ isOpen, onClose, classToEdit, onSave, instructors, all
     };
     
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
-            <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
-                <div className="p-6 border-b"><h2 className="text-2xl font-bold text-gray-800">{classToEdit ? 'Edit Class' : 'Add New Class'}</h2></div>
-                <div className="p-6 space-y-4 overflow-y-auto">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Class Name</label>
-                        <input name="name" value={formData.name || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Icon</label>
-                        <select name="iconUrl" value={formData.iconUrl || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
-                            <option value="">-- Select an icon --</option>
-                            {(icons || []).map(icon => (
-                                <option key={icon.id} value={icon.url}>{icon.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label className="block text-sm font-medium text-gray-700">Start Date</label><input type="date" name="startDate" value={formData.startDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
-                        <div><label className="block text-sm font-medium text-gray-700">End Date</label><input type="date" name="endDate" value={formData.endDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
-                    </div>
-                    <div><label className="block text-sm font-medium text-gray-700">Lead Instructor</label><select name="leadInstructorId" value={formData.leadInstructorId || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">{instructors.map(i => <option key={i.id} value={i.id}>{i.firstName} {i.lastName}</option>)}</select></div>
-
-                    {classToEdit && (
-                        <div>
-                            <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Group & Enrollment Management</h3>
-                            <div className="flex items-center space-x-2 mt-2">
-                                <label className="text-sm font-medium">Number of Groups:</label>
-                                <input type="number" value={numGroups} onChange={(e) => setNumGroups(parseInt(e.target.value, 10) || 1)} min="1" className="w-20 border-gray-300 rounded-md shadow-sm" />
-                                <button type="button" onClick={handleRandomAssign} className="px-4 py-2 text-sm bg-gray-200 rounded-md hover:bg-gray-300">Randomly Assign</button>
-                            </div>
-                            <div className="mt-4 max-h-48 overflow-y-auto border rounded-md p-2">
-                                <h4 className="font-semibold mb-2">Enrolled Students ({enrolledStudentsList.length})</h4>
-                                {enrolledStudentsList.length > 0 ? (
-                                    <ul className="space-y-2">
-                                        {enrolledStudentsList.map(student => (
-                                            <li key={student.id} className="flex justify-between items-center p-1 bg-gray-50 rounded">
-                                                <span className="text-sm">{student.firstName} {student.lastName}</span>
-                                                <div className="flex items-center space-x-2">
-                                                    <select value={formData.studentGroups[student.id] || ''} onChange={(e) => handleManualGroupChange(student.id, e.target.value)} className="border-gray-300 rounded-md shadow-sm text-sm p-1">
-                                                        <option value="">Unassigned</option>
-                                                        {[...Array(numGroups)].map((_, i) => <option key={i+1} value={i+1}>Group {i+1}</option>)}
-                                                    </select>
-                                                    <button type="button" onClick={() => handleUnenrollStudent(student.id)} className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded-md hover:bg-red-200">Unenroll</button>
-                                                </div>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : <p className="text-sm text-gray-500 italic">No students are enrolled in this class yet.</p>}
-                            </div>
-                        </div>
-                    )}
-                    
-                    <div>
-                        <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Prerequisites</h3>
-                        <p className="mt-1 text-sm text-gray-500">Define the requirements users must meet before enrolling.</p>
-                        <div className="mt-4 space-y-3">
-                            {(formData.prerequisites || []).map((prereq, index) => (
-                                <div key={prereq.id} className="flex items-center space-x-2 p-3 bg-gray-50 rounded-md">
-                                    <div className="flex-grow grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-500">Description</label>
-                                            <input
-                                                type="text"
-                                                name="description"
-                                                value={prereq.description}
-                                                onChange={(e) => handlePrereqChange(index, 'description', e.target.value)}
-                                                className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm"
-                                                placeholder="e.g., Provide CPR Certification"
-                                            />
-                                        </div>
-                                        <div className="flex items-center mt-4">
-                                            <label className="inline-flex items-center text-sm font-medium text-gray-700">
-                                                <input
-                                                    type="checkbox"
-                                                    name="requiresUpload"
-                                                    checked={prereq.requiresUpload}
-                                                    onChange={(e) => handlePrereqChange(index, 'requiresUpload', e.target.checked)}
-                                                    className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-                                                />
-                                                <span className="ml-2">Requires File Upload</span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                    <button type="button" onClick={() => removePrerequisite(index)} className="p-2 text-red-500 hover:bg-red-100 rounded-md">
-                                        <Trash2 size={18} />
-                                    </button>
-                                </div>
-                            ))}
-                            <button type="button" onClick={addPrerequisite} className="flex items-center text-primary-dark hover:text-primary-hover text-sm font-medium">
-                                <PlusCircle className="mr-2" size={18} /> Add Prerequisite
+        <>
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+                <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+                    <div className="p-6 border-b flex justify-between items-center">
+                        <h2 className="text-2xl font-bold text-gray-800">{classToEdit ? 'Edit Class' : 'Add New Class'}</h2>
+                        {classToEdit && (
+                            <button type="button" onClick={() => setIsRosterOpen(true)} className="flex items-center text-sm text-indigo-600 hover:text-indigo-800">
+                                <Users size={18} className="mr-1" /> View Roster
                             </button>
-                        </div>
+                        )}
                     </div>
+                    <div className="p-6 space-y-4 overflow-y-auto">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Class Name</label>
+                            <input name="name" value={formData.name || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Icon</label>
+                            <select name="iconUrl" value={formData.iconUrl || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">
+                                <option value="">-- Select an icon --</option>
+                                {(icons || []).map(icon => (
+                                    <option key={icon.id} value={icon.url}>{icon.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div><label className="block text-sm font-medium text-gray-700">Start Date</label><input type="date" name="startDate" value={formData.startDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
+                            <div><label className="block text-sm font-medium text-gray-700">End Date</label><input type="date" name="endDate" value={formData.endDate || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm" /></div>
+                        </div>
+                        <div><label className="block text-sm font-medium text-gray-700">Lead Instructor</label><select name="leadInstructorId" value={formData.leadInstructorId || ''} onChange={handleInputChange} className="mt-1 w-full border-gray-300 rounded-md shadow-sm">{instructors.map(i => <option key={i.id} value={i.id}>{i.firstName} {i.lastName}</option>)}</select></div>
 
-                    <div>
-                        <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Waivers</h3>
-                        <p className="mt-1 text-sm text-gray-500">Select one or more waivers that must be signed for this class.</p>
-                        <div className="mt-4">
-                            <MultiSelectDropdown
-                                options={waivers || []}
-                                selected={formData.waiverIds || []}
-                                onChange={handleWaiverChange}
-                                placeholder="Assign Waivers..."
+                        {classToEdit && (
+                            <div>
+                                <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Group & Enrollment Management</h3>
+                                <div className="flex items-center space-x-2 mt-2">
+                                    <label className="text-sm font-medium">Number of Groups:</label>
+                                    <input type="number" value={numGroups} onChange={(e) => setNumGroups(parseInt(e.target.value, 10) || 1)} min="1" className="w-20 border-gray-300 rounded-md shadow-sm" />
+                                    <button type="button" onClick={handleRandomAssign} className="px-4 py-2 text-sm bg-gray-200 rounded-md hover:bg-gray-300">Randomly Assign</button>
+                                </div>
+                                <div className="mt-4 max-h-48 overflow-y-auto border rounded-md p-2">
+                                    <h4 className="font-semibold mb-2">Enrolled Students ({enrolledStudentsList.length})</h4>
+                                    {enrolledStudentsList.length > 0 ? (
+                                        <ul className="space-y-2">
+                                            {enrolledStudentsList.map(student => (
+                                                <li key={student.id} className="flex justify-between items-center p-1 bg-gray-50 rounded">
+                                                    <span className="text-sm">{student.firstName} {student.lastName}</span>
+                                                    <div className="flex items-center space-x-2">
+                                                        <select value={formData.studentGroups[student.id] || ''} onChange={(e) => handleManualGroupChange(student.id, e.target.value)} className="border-gray-300 rounded-md shadow-sm text-sm p-1">
+                                                            <option value="">Unassigned</option>
+                                                            {[...Array(numGroups)].map((_, i) => <option key={i+1} value={i+1}>Group {i+1}</option>)}
+                                                        </select>
+                                                        <button type="button" onClick={() => handleUnenrollStudent(student.id)} className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded-md hover:bg-red-200">Unenroll</button>
+                                                    </div>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : <p className="text-sm text-gray-500 italic">No students are enrolled in this class yet.</p>}
+                                </div>
+                            </div>
+                        )}
+                        
+                        <div>
+                            <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Prerequisites</h3>
+                            <p className="mt-1 text-sm text-gray-500">Define the requirements users must meet before enrolling.</p>
+                            <div className="mt-4 space-y-3">
+                                {(formData.prerequisites || []).map((prereq, index) => (
+                                    <div key={prereq.id} className="flex items-center space-x-2 p-3 bg-gray-50 rounded-md">
+                                        <div className="flex-grow grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-500">Description</label>
+                                                <input
+                                                    type="text"
+                                                    name="description"
+                                                    value={prereq.description}
+                                                    onChange={(e) => handlePrereqChange(index, 'description', e.target.value)}
+                                                    className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm"
+                                                    placeholder="e.g., Provide CPR Certification"
+                                                />
+                                            </div>
+                                            <div className="flex items-center mt-4">
+                                                <label className="inline-flex items-center text-sm font-medium text-gray-700">
+                                                    <input
+                                                        type="checkbox"
+                                                        name="requiresUpload"
+                                                        checked={prereq.requiresUpload}
+                                                        onChange={(e) => handlePrereqChange(index, 'requiresUpload', e.target.checked)}
+                                                        className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                                                    />
+                                                    <span className="ml-2">Requires File Upload</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <button type="button" onClick={() => removePrerequisite(index)} className="p-2 text-red-500 hover:bg-red-100 rounded-md">
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </div>
+                                ))}
+                                <button type="button" onClick={addPrerequisite} className="flex items-center text-primary-dark hover:text-primary-hover text-sm font-medium">
+                                    <PlusCircle className="mr-2" size={18} /> Add Prerequisite
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Waivers</h3>
+                            <p className="mt-1 text-sm text-gray-500">Select one or more waivers that must be signed for this class.</p>
+                            <div className="mt-4">
+                                <MultiSelectDropdown
+                                    options={waivers || []}
+                                    selected={formData.waiverIds || []}
+                                    onChange={handleWaiverChange}
+                                    placeholder="Assign Waivers..."
+                                    displayField="title"
+                                />
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Support Needs</h3>
+                            <p className="mt-1 text-sm text-gray-500">Add instructors or other personnel to assist with this class.</p>
+                            <div className="mt-4 space-y-3">
+                                {(formData.supportNeeds || []).map((need, index) => (
+                                    <div key={need.id} className="flex items-center space-x-2 p-3 bg-gray-50 rounded-md">
+                                        <div className="flex-grow grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                            <div><label className="block text-xs font-medium text-gray-500">Need</label><input type="text" name="need" value={need.need} onChange={(e) => handleSupportChange(index, 'need', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm" placeholder="e.g., Lead Instructor, Paramedic" /></div>
+                                            <div><label className="block text-xs font-medium text-gray-500">Date</label><input type="date" name="date" value={need.date} onChange={(e) => handleSupportChange(index, 'date', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm" /></div>
+                                            <div className="grid grid-cols-2 gap-2"><div><label className="block text-xs font-medium text-gray-500">Start</label><input type="time" name="startTime" value={need.startTime} onChange={(e) => handleSupportChange(index, 'startTime', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm" /></div><div><label className="block text-xs font-medium text-gray-500">End</label><input type="time" name="endTime" value={need.endTime} onChange={(e) => handleSupportChange(index, 'endTime', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm" /></div></div>
+                                            <div><label className="block text-xs font-medium text-gray-500">Assigned To</label><select name="assignedUserId" value={need.assignedUserId} onChange={(e) => handleSupportChange(index, 'assignedUserId', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm"><option value="">Unassigned</option>{instructors.map(i => <option key={i.id} value={i.id}>{i.firstName} {i.lastName}</option>)}</select></div>
+                                        </div>
+                                        <button type="button" onClick={() => removeSupportNeed(index)} className="p-2 text-red-500 hover:bg-red-100 rounded-md"><Trash2 size={18} /></button>
+                                    </div>
+                                ))}
+                                <button type="button" onClick={addSupportNeed} className="flex items-center text-primary-dark hover:text-primary-hover text-sm font-medium"><PlusCircle className="mr-2" size={18} /> Add Support Need</button>
+                            </div>
+                        </div>
+                        
+                        <div className="mt-4 border-t pt-4">
+                            <label className="block text-sm font-medium text-gray-700">Visible To Roles</label>
+                            <MultiSelectDropdown 
+                                options={(allRoles || []).map(r => ({id: r, title: r}))}
+                                selected={formData.visibleToRoles || []}
+                                onChange={handleRoleVisibilityChange}
+                                placeholder="Select roles"
                                 displayField="title"
                             />
                         </div>
-                    </div>
-                    
-                    <div>
-                        <h3 className="text-md font-medium text-gray-900 border-t pt-4 mt-4">Support Needs</h3>
-                        <p className="mt-1 text-sm text-gray-500">Add instructors or other personnel to assist with this class.</p>
-                        <div className="mt-4 space-y-3">
-                            {(formData.supportNeeds || []).map((need, index) => (
-                                <div key={need.id} className="flex items-center space-x-2 p-3 bg-gray-50 rounded-md">
-                                    <div className="flex-grow grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                        <div><label className="block text-xs font-medium text-gray-500">Need</label><input type="text" name="need" value={need.need} onChange={(e) => handleSupportChange(index, 'need', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm" placeholder="e.g., Lead Instructor, Paramedic" /></div>
-                                        <div><label className="block text-xs font-medium text-gray-500">Date</label><input type="date" name="date" value={need.date} onChange={(e) => handleSupportChange(index, 'date', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm" /></div>
-                                        <div className="grid grid-cols-2 gap-2"><div><label className="block text-xs font-medium text-gray-500">Start</label><input type="time" name="startTime" value={need.startTime} onChange={(e) => handleSupportChange(index, 'startTime', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm" /></div><div><label className="block text-xs font-medium text-gray-500">End</label><input type="time" name="endTime" value={need.endTime} onChange={(e) => handleSupportChange(index, 'endTime', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm" /></div></div>
-                                        <div><label className="block text-xs font-medium text-gray-500">Assigned To</label><select name="assignedUserId" value={need.assignedUserId} onChange={(e) => handleSupportChange(index, 'assignedUserId', e.target.value)} className="mt-1 w-full border-gray-300 rounded-md shadow-sm text-sm"><option value="">Unassigned</option>{instructors.map(i => <option key={i.id} value={i.id}>{i.firstName} {i.lastName}</option>)}</select></div>
-                                    </div>
-                                    <button type="button" onClick={() => removeSupportNeed(index)} className="p-2 text-red-500 hover:bg-red-100 rounded-md"><Trash2 size={18} /></button>
-                                </div>
-                            ))}
-                            <button type="button" onClick={addSupportNeed} className="flex items-center text-primary-dark hover:text-primary-hover text-sm font-medium"><PlusCircle className="mr-2" size={18} /> Add Support Need</button>
+                        <div className="mt-4 border-t pt-4">
+                            <label className="inline-flex items-center text-sm font-medium text-gray-700">
+                                <input type="checkbox" name="isHidden" checked={formData.isHidden || false} onChange={handleInputChange} className="rounded border-gray-300 text-indigo-600 shadow-sm" />
+                                <span className="ml-2">Hide from Course Catalog</span>
+                            </label>
+                        </div>
+                        <div className="mt-4 border-t pt-4">
+                            <label className="inline-flex items-center text-sm font-medium text-gray-700">
+                                <input type="checkbox" name="isCompleted" checked={formData.isCompleted || false} onChange={handleInputChange} className="rounded border-gray-300 text-indigo-600 shadow-sm" />
+                                <span className="ml-2">Mark as Completed</span>
+                            </label>
                         </div>
                     </div>
-                    
-                    <div className="mt-4 border-t pt-4">
-                        <label className="block text-sm font-medium text-gray-700">Visible To Roles</label>
-                        <MultiSelectDropdown 
-                            options={(allRoles || []).map(r => ({id: r, title: r}))}
-                            selected={formData.visibleToRoles || []}
-                            onChange={handleRoleVisibilityChange}
-                            placeholder="Select roles"
-                            displayField="title"
-                        />
+                    <div className="p-6 bg-gray-50 border-t flex justify-end space-x-3">
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-white border rounded-md">Cancel</button>
+                        <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md">Save Class</button>
                     </div>
-                    <div className="mt-4 border-t pt-4">
-                        <label className="inline-flex items-center text-sm font-medium text-gray-700">
-                            <input type="checkbox" name="isHidden" checked={formData.isHidden || false} onChange={handleInputChange} className="rounded border-gray-300 text-indigo-600 shadow-sm" />
-                            <span className="ml-2">Hide from Course Catalog</span>
-                        </label>
-                    </div>
-                    <div className="mt-4 border-t pt-4">
-                        <label className="inline-flex items-center text-sm font-medium text-gray-700">
-                            <input type="checkbox" name="isCompleted" checked={formData.isCompleted || false} onChange={handleInputChange} className="rounded border-gray-300 text-indigo-600 shadow-sm" />
-                            <span className="ml-2">Mark as Completed</span>
-                        </label>
-                    </div>
-                </div>
-                <div className="p-6 bg-gray-50 border-t flex justify-end space-x-3">
-                    <button type="button" onClick={onClose} className="px-4 py-2 bg-white border rounded-md">Cancel</button>
-                    <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md">Save Class</button>
-                </div>
-            </form>
-        </div>
+                </form>
+            </div>
+            <ClassRosterModal
+                isOpen={isRosterOpen}
+                onClose={() => setIsRosterOpen(false)}
+                classToView={classToEdit}
+                allUsers={allUsers}
+                waivers={waivers}
+            />
+        </>
     );
 };
 

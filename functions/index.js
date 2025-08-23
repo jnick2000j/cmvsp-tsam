@@ -86,6 +86,15 @@ exports.enrollStudent = onCall(async (request) => {
     if (hasWaivers && Object.keys(waiverSignatures).length !== classData.waiverIds.length) {
         throw new HttpsError('failed-precondition', 'All required waivers must be signed to enroll.');
     }
+    
+    // Add timestamp to each signature
+    const signaturesWithTimestamp = {};
+    for (const waiverId in waiverSignatures) {
+        signaturesWithTimestamp[waiverId] = {
+            signature: waiverSignatures[waiverId],
+            signedAt: FieldValue.serverTimestamp()
+        };
+    }
 
     try {
         await enrollmentRef.set({
@@ -94,7 +103,7 @@ exports.enrollStudent = onCall(async (request) => {
             approvedAt: FieldValue.serverTimestamp(),
             approvedBy: uid,
             prerequisiteSubmissions,
-            waiverSignatures, // Save waiver signatures
+            waiverSignatures: signaturesWithTimestamp,
         });
 
         await studentRef.update({
